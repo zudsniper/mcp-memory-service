@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
 build/
 develop-eggs/
 dist/
@@ -16,19 +17,13 @@ parts/
 sdist/
 var/
 wheels/
-share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
-# Environments
-.env
-.venv
-env/
+# Virtual Environment
 venv/
-ENV/
-env.bak/
-venv.bak/
+.env
 
 # IDE
 .idea/
@@ -39,15 +34,11 @@ venv.bak/
 # ChromaDB
 chroma_db/
 
+# Project specific
+backups/
+test_output.txt
+
 # macOS
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Logs and databases
-*.log
-*.sqlite3
-test_output.txt
-
-# Backups
-backups/
