@@ -1,5 +1,6 @@
 import asyncio
 import os
+from typing import List 
 import time
 import logging
 import chromadb
@@ -11,6 +12,7 @@ from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
 import argparse
 import sys
+from .config import CHROMA_PATH, BACKUPS_PATH
 
 # Configure logging
 logging.basicConfig(
@@ -21,10 +23,6 @@ logger = logging.getLogger(__name__)
 
 # Set environment variable for PyTorch MPS
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-# Constants to be set in Claude Desktop Config
-# CHROMA_PATH = os.path.expanduser("path_to/chroma_db")
-# BACKUPS_PATH = os.path.expanduser("path_to/backups")
 
 class MemoryServer:
     def __init__(self):
@@ -320,4 +318,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()`
+    main()
