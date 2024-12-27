@@ -96,8 +96,11 @@ class ChromaMemoryStorage(MemoryStorage):
         """Delete memories by tag."""
         try:
             # First get all memories with the tag
+            # Expected where operator to be one of $gt, $gte, $lt, $lte, $ne, $eq, $in, $nin.
+            where_clause = {"tags": {"$in": [tag]}}  # Wrap single tag in list
+            
             results = self.collection.get(
-                where={"tags": {"$contains": tag}}
+                where=where_clause
             )
             
             if not results["ids"]:
@@ -106,7 +109,7 @@ class ChromaMemoryStorage(MemoryStorage):
             # Delete all found memories
             count = len(results["ids"])
             self.collection.delete(
-                where={"tags": {"$contains": tag}}
+                where={"tags": {"$in": [tag]}}
             )
             
             return count, f"Successfully deleted {count} memories with tag '{tag}'"
@@ -207,33 +210,31 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error retrieving memories: {str(e)}")
             return []
 
-    # async def search_by_tag(self, tags: List[str]) -> List[Memory]:
-        # """Search memories by tags using proper metadata filtering."""
-        # try:
-        #     where_clause = {
-        #         "$and": [{"tags": {"$contains": tag}} for tag in tags]
-        #     }
+    async def search_by_tag(self, tags: List[str]) -> List[Memory]:
+        """Search memories by tags using proper metadata filtering."""
+        try:
+            where_clause = {"tags": {"$in": tags}}
             
-        #     results = self.collection.get(
-        #         where=where_clause
-        #     )
+            results = self.collection.get(
+                where=where_clause
+            )
             
-        #     if not results["ids"]:
-        #         return []
+            if not results["ids"]:
+                return []
             
-        #     memories = []
-        #     for i, doc in enumerate(results["documents"]):
-        #         metadata = results["metadatas"][i]
-        #         memory = Memory(
-        #             content=doc,
-        #             content_hash=metadata["content_hash"],
-        #             tags=metadata.get("tags", []),
-        #             memory_type=metadata.get("memory_type")
-        #         )
-        #         memories.append(memory)
+            memories = []
+            for i, doc in enumerate(results["documents"]):
+                metadata = results["metadatas"][i]
+                memory = Memory(
+                    content=doc,
+                    content_hash=metadata["content_hash"],
+                    tags=metadata.get("tags", []),
+                    memory_type=metadata.get("memory_type")
+                )
+                memories.append(memory)
             
-        #     return memories
+            return memories
             
-        # except Exception as e:
-        #     logger.error(f"Error searching by tags: {str(e)}")
-        #     return []
+        except Exception as e:
+            logger.error(f"Error searching by tags: {str(e)}")
+            return []

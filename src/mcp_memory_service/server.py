@@ -118,17 +118,17 @@ class MemoryServer:
                         "required": ["query"]
                     }
                 ),
-                # types.Tool(
-                #     name="search_by_tag",
-                #     description="Search memories by tags",
-                #     inputSchema={
-                #         "type": "object",
-                #         "properties": {
-                #             "tags": {"type": "array", "items": {"type": "string"}}
-                #         },
-                #         "required": ["tags"]
-                #     }
-                # ),
+                types.Tool(
+                    name="search_by_tag",
+                    description="Search memories by tags",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "tags": {"type": "array", "items": {"type": "string"}}
+                        },
+                        "required": ["tags"]
+                    }
+                ),
                 types.Tool(
                     name="delete_memory",
                     description="Delete a specific memory by its hash",
@@ -223,8 +223,8 @@ class MemoryServer:
                     return await self.handle_store_memory(arguments)
                 elif name == "retrieve_memory":
                     return await self.handle_retrieve_memory(arguments)
-                # elif name == "search_by_tag":
-                #     return await self.handle_search_by_tag(arguments)
+                elif name == "search_by_tag":
+                    return await self.handle_search_by_tag(arguments)
                 elif name == "delete_memory":
                     return await self.handle_delete_memory(arguments)
                 elif name == "delete_by_tag":
@@ -330,41 +330,41 @@ class MemoryServer:
 {traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error retrieving memories: {str(e)}")]
 
-    # async def handle_search_by_tag(self, arguments: dict) -> List[types.TextContent]:
-    #     tags = arguments.get("tags", [])
+    async def handle_search_by_tag(self, arguments: dict) -> List[types.TextContent]:
+        tags = arguments.get("tags", [])
         
-    #     if not tags:
-    #         return [types.TextContent(type="text", text="Error: Tags are required")]
+        if not tags:
+            return [types.TextContent(type="text", text="Error: Tags are required")]
         
-    #     try:
-    #         memories = await self.storage.search_by_tag(tags)
+        try:
+            memories = await self.storage.search_by_tag(tags)
             
-    #         if not memories:
-    #             return [types.TextContent(
-    #                 type="text",
-    #                 text=f"No memories found with tags: {', '.join(tags)}"
-    #             )]
+            if not memories:
+                return [types.TextContent(
+                    type="text",
+                    text=f"No memories found with tags: {', '.join(tags)}"
+                )]
             
-    #         formatted_results = []
-    #         for i, memory in enumerate(memories):
-    #             memory_info = [
-    #                 f"Memory {i+1}:",
-    #                 f"Content: {memory.content}",
-    #                 f"Hash: {memory.content_hash}",
-    #                 f"Tags: {', '.join(memory.tags)}"
-    #             ]
-    #             if memory.memory_type:
-    #                 memory_info.append(f"Type: {memory.memory_type}")
-    #             memory_info.append("---")
-    #             formatted_results.append("\n".join(memory_info))
+            formatted_results = []
+            for i, memory in enumerate(memories):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {memory.content}",
+                    f"Hash: {memory.content_hash}",
+                    f"Tags: {', '.join(memory.tags)}"
+                ]
+                if memory.memory_type:
+                    memory_info.append(f"Type: {memory.memory_type}")
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
             
-    #         return [types.TextContent(
-    #             type="text",
-    #             text="Found the following memories:\n\n".join(formatted_results)
-    #         )]
-    #     except Exception as e:
-    #         logger.error(f"Error searching by tags: {str(e)}\n{traceback.format_exc()}")
-    #         return [types.TextContent(type="text", text=f"Error searching by tags: {str(e)}")]
+            return [types.TextContent(
+                type="text",
+                text="Found the following memories:\n\n".join(formatted_results)
+            )]
+        except Exception as e:
+            logger.error(f"Error searching by tags: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(type="text", text=f"Error searching by tags: {str(e)}")]
 
     async def handle_delete_memory(self, arguments: dict) -> List[types.TextContent]:
         content_hash = arguments.get("content_hash")
