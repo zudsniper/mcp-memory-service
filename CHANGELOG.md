@@ -1,15 +1,14 @@
-# Changelog
+# CHANGELOG
 
-All notable changes to this project will be documented in this file.(let's pray)
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## v0.1.0 (2024-12-27)
 
-## [0.1.0] - 2024-12-27
+### Chores
 
-### Added
-- Initial release
-- Basic semantic memory service functionality
-- WebSocket server implementation
-- ChromaDB integration
-- Sentence-transformer integration
+- Update gitignore
+  ([`97ba25c`](https://github.com/doobidoo/mcp-memory-service/commit/97ba25c83113ed228d6684b8c65bc65774c0b704))
+
+### Features
+
+- Add MCP protocol compliance and fix response formats
+  ([`fefd579`](https://github.com/doobidoo/mcp-memory-service/commit/fefd5796b3fb758023bb574b508940a651e48ad5))
