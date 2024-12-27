@@ -1,3 +1,8 @@
+"""
+MCP Memory Service
+Copyright (c) 2024 Heinrich Krupp
+Licensed under the MIT License. See LICENSE file in the project root for full license text.
+"""
 import os
 import sys
 from pathlib import Path
@@ -28,7 +33,7 @@ def validate_and_create_path(path: str) -> str:
         logger.error(f"Error validating path {path}: {str(e)}")
         raise
 
-# Determine base directory - prefer local over iCloud
+# Determine base directory - prefer local over Cloud
 def get_base_directory() -> str:
     """Get base directory for storage, with fallback options."""
     # First choice: Environment variable

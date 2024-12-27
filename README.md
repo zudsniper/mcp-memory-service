@@ -41,7 +41,6 @@ python src/memory_server.py
 
 2. Connect to websocket at `ws://localhost:8765`
 
-
 ## Claude MCP configuration
 
 Add the following to your `claude_desktop_config.json` file:
@@ -227,10 +226,10 @@ pytest-asyncio>=0.21.0
 ```
 
 ## Important Notes
-- Always ensure iCloud sync is complete before accessing from another device
+- When storing in cloud, always ensure iCloud or other Cloud Drives sync is complete before accessing from another device
 - Regular backups are crucial when testing new features
-- Monitor ChromaDB storage size in iCloud
-- The service includes automatic backup functionality that runs every 24 hours
+- Monitor ChromaDB storage size and optimize as needed
+- The service includes automatic backup functionality that runs every 24 hours(tbd)
 - Debug mode is available for troubleshooting semantic search results
 - Memory optimization runs automatically when database size exceeds configured thresholds
 
@@ -271,7 +270,7 @@ source venv/bin/activate
 # Install dev dependencies
 pip install -r requirements-dev.txt
 
-# Run tests
+# Run tests (need to be fixed)
 pytest tests/
 ```
 
