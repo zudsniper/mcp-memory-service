@@ -34,16 +34,18 @@ os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 class MemoryServer:
     def __init__(self):
+        """Initialize the server."""
         self.server = Server(SERVER_NAME)
         
-        # Initialize paths
-        logger.info(f"Creating directories if they don't exist...")
-        os.makedirs(CHROMA_PATH, exist_ok=True)
-        os.makedirs(BACKUPS_PATH, exist_ok=True)
-        
         try:
-            # Initialize storage
+            # Initialize paths
+            logger.info(f"Creating directories if they don't exist...")
+            os.makedirs(CHROMA_PATH, exist_ok=True)
+            os.makedirs(BACKUPS_PATH, exist_ok=True)
+            
+            # Initialize storage - this part is synchronous
             self.storage = ChromaMemoryStorage(CHROMA_PATH)
+
         except Exception as e:
             logger.error(f"Initialization error: {str(e)}")
             raise
@@ -51,6 +53,36 @@ class MemoryServer:
         # Register handlers
         self.register_handlers()
         logger.info("Server initialization complete")
+
+    async def initialize(self):
+        """Async initialization method."""
+        try:
+            # Run any async initialization tasks here
+            await self.validate_database_health()
+            return True
+        except Exception as e:
+            logger.error(f"Async initialization error: {str(e)}")
+            raise
+
+    async def validate_database_health(self):
+        """Validate database health during initialization."""
+        from .utils.db_utils import validate_database, repair_database
+        
+        # Check database health
+        is_valid, message = await validate_database(self.storage)
+        if not is_valid:
+            logger.warning(f"Database validation failed: {message}")
+            
+            # Attempt repair
+            logger.info("Attempting database repair...")
+            repair_success, repair_message = await repair_database(self.storage)
+            
+            if not repair_success:
+                raise RuntimeError(f"Database repair failed: {repair_message}")
+            else:
+                logger.info(f"Database repair successful: {repair_message}")
+        else:
+            logger.info(f"Database validation successful: {message}")
 
     def register_handlers(self):
         @self.server.list_tools()
@@ -169,6 +201,14 @@ class MemoryServer:
                         },
                         "required": ["content"]
                     }
+                ),
+                types.Tool(
+                    name="check_database_health",
+                    description="Check database health and get statistics",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
                 )
             ]
 
@@ -199,11 +239,33 @@ class MemoryServer:
                     return await self.handle_debug_retrieve(arguments)
                 elif name == "exact_match_retrieve":
                     return await self.handle_exact_match_retrieve(arguments)
+                elif name == "check_database_health":
+                    return await self.handle_check_database_health(arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             except Exception as e:
                 logger.error(f"Error in {name}: {str(e)}\n{traceback.format_exc()}")
                 return [types.TextContent(type="text", text=f"Error: {str(e)}")]
+
+    async def validate_database_health(self):
+        """Validate database health during initialization."""
+        from .utils.db_utils import validate_database, repair_database
+        
+        # Check database health
+        is_valid, message = await validate_database(self.storage)
+        if not is_valid:
+            logger.warning(f"Database validation failed: {message}")
+            
+            # Attempt repair
+            logger.info("Attempting database repair...")
+            repair_success, repair_message = await repair_database(self.storage)
+            
+            if not repair_success:
+                raise RuntimeError(f"Database repair failed: {repair_message}")
+            else:
+                logger.info(f"Database repair successful: {repair_message}")
+        else:
+            logger.info(f"Database validation successful: {message}")
 
     async def handle_store_memory(self, arguments: dict) -> List[types.TextContent]:
         content = arguments.get("content")
@@ -424,6 +486,36 @@ class MemoryServer:
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error in exact match retrieve: {str(e)}")]
 
+    async def handle_check_database_health(self, arguments: dict) -> List[types.TextContent]:
+        """Handle database health check requests."""
+        from .utils.db_utils import validate_database, get_database_stats
+        
+        try:
+            # Get validation status
+            is_valid, message = await validate_database(self.storage)
+            
+            # Get database stats
+            stats = get_database_stats(self.storage)
+            
+            # Combine results
+            result = {
+                "validation": {
+                    "status": "healthy" if is_valid else "unhealthy",
+                    "message": message
+                },
+                "statistics": stats
+            }
+            
+            return [types.TextContent(
+                type="text",
+                text=f"Database Health Check Results:\n{json.dumps(result, indent=2)}"
+            )]
+        except Exception as e:
+            return [types.TextContent(
+                type="text",
+                text=f"Error checking database health: {str(e)}"
+            )]
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="MCP Memory Service - A semantic memory service using the Model Context Protocol"
@@ -454,8 +546,13 @@ async def async_main():
     logger.info(f"Starting MCP Memory Service with ChromaDB path: {CHROMA_PATH}")
     
     try:
+        # Create server instance
         memory_server = MemoryServer()
         
+        # Run async initialization
+        await memory_server.initialize()
+        
+        # Start the server
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
             logger.info("Server started and ready to handle requests")
             await memory_server.server.run(

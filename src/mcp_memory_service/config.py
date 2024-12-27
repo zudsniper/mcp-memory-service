@@ -1,27 +1,75 @@
-# config.py
 import os
+import sys
 from pathlib import Path
+import logging
 
-# Base paths
-HOME = str(Path.home())
-ICLOUD_BASE = os.path.join(HOME, "Library", "Mobile Documents", "com~apple~CloudDocs", "ai", "claude-memory")
-CHROMA_PATH = os.path.join(ICLOUD_BASE, "chroma_db")
-BACKUPS_PATH = os.path.join(ICLOUD_BASE, "backups")
+logger = logging.getLogger(__name__)
+
+def validate_and_create_path(path: str) -> str:
+    """Validate and create a directory path, ensuring it's writable."""
+    try:
+        # Convert to absolute path
+        abs_path = os.path.abspath(path)
+        
+        # Create directory if it doesn't exist
+        os.makedirs(abs_path, exist_ok=True)
+        
+        # Check if directory is writable
+        test_file = os.path.join(abs_path, '.write_test')
+        try:
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+        except Exception as e:
+            raise PermissionError(f"Directory {abs_path} is not writable: {str(e)}")
+        
+        return abs_path
+    except Exception as e:
+        logger.error(f"Error validating path {path}: {str(e)}")
+        raise
+
+# Determine base directory - prefer local over iCloud
+def get_base_directory() -> str:
+    """Get base directory for storage, with fallback options."""
+    # First choice: Environment variable
+    if base_dir := os.getenv('MCP_MEMORY_BASE_DIR'):
+        return validate_and_create_path(base_dir)
+    
+    # Second choice: Local app data directory
+    home = str(Path.home())
+    if sys.platform == 'darwin':  # macOS
+        base = os.path.join(home, 'Library', 'Application Support', 'mcp-memory')
+    elif sys.platform == 'win32':  # Windows
+        base = os.path.join(os.getenv('LOCALAPPDATA', ''), 'mcp-memory')
+    else:  # Linux and others
+        base = os.path.join(home, '.local', 'share', 'mcp-memory')
+    
+    return validate_and_create_path(base)
+
+# Initialize paths
+try:
+    BASE_DIR = get_base_directory()
+    CHROMA_PATH = validate_and_create_path(os.path.join(BASE_DIR, 'chroma_db'))
+    BACKUPS_PATH = validate_and_create_path(os.path.join(BASE_DIR, 'backups'))
+except Exception as e:
+    logger.error(f"Fatal error initializing paths: {str(e)}")
+    sys.exit(1)
 
 # Server settings
 SERVER_NAME = "memory"
 SERVER_VERSION = "0.2.0"
 
-# Model settings
-EMBEDDING_MODEL = 'all-MiniLM-L6-v2'
-
 # ChromaDB settings
 CHROMA_SETTINGS = {
     "anonymized_telemetry": False,
     "allow_reset": True,
-    "is_persistent": True
+    "is_persistent": True,
+    "chroma_db_impl": "duckdb+parquet"
 }
 
-# Memory collection settings
-COLLECTION_NAME = "memory_collection"
-COLLECTION_METADATA = {"hnsw:space": "cosine"}
+# Collection settings
+COLLECTION_METADATA = {
+    "hnsw:space": "cosine",
+    "hnsw:construction_ef": 100,  # Increased for better accuracy
+    "hnsw:search_ef": 100        # Increased for better search results
+}
