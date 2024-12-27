@@ -1,6 +1,135 @@
 # MCP Memory Service
 
-[Previous content remains the same until the Testing section]
+An MCP server providing semantic memory and persistent storage capabilities for Claude using ChromaDB and sentence transformers. This service enables long-term memory storage with semantic search capabilities, making it ideal for maintaining context across conversations.
+
+## Features
+
+- Semantic search using sentence transformers
+- Tag-based memory retrieval system
+- Persistent storage using ChromaDB
+- Automatic database backups
+- Memory optimization tools
+- Exact match retrieval
+- Debug mode for similarity analysis
+- Database health monitoring
+- Duplicate detection and cleanup
+- Customizable embedding model
+
+## Installation
+
+1. Create Python virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+2. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+1. Start the server:
+```bash
+python src/memory_server.py
+```
+
+2. Connect to websocket at `ws://localhost:8765`
+
+## Available Tools
+
+### Core Memory Operations
+
+1. `store_memory`
+   - Store new information with optional tags
+   - Parameters:
+     - content: String (required)
+     - metadata: Object (optional)
+       - tags: Array of strings
+       - type: String
+   Example:
+   ```json
+   {
+     "content": "The capital of France is Paris",
+     "metadata": {
+       "tags": ["geography", "cities", "europe"],
+       "type": "fact"
+     }
+   }
+   ```
+
+2. `retrieve_memory`
+   - Perform semantic search for relevant memories
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional, default: 5)
+   Example:
+   ```json
+   {
+     "query": "What is the capital of France?",
+     "n_results": 3
+   }
+   ```
+
+3. `search_by_tag`
+   - Find memories using specific tags
+   - Parameters:
+     - tags: Array of strings (required)
+   Example:
+   ```json
+   {
+     "tags": ["geography", "europe"]
+   }
+   ```
+
+### Advanced Operations
+
+4. `exact_match_retrieve`
+   - Find memories with exact content match
+   - Parameters:
+     - content: String (required)
+
+5. `debug_retrieve`
+   - Retrieve memories with similarity scores
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional)
+     - similarity_threshold: Number (optional)
+
+### Database Management
+
+6. `create_backup`
+   - Create database backup
+   - Parameters: None
+
+7. `get_stats`
+   - Get memory statistics
+   - Returns: Database size, memory count, etc.
+
+8. `optimize_db`
+   - Optimize database performance
+   - Parameters: None
+
+9. `cleanup_duplicates`
+   - Remove duplicate entries
+   - Parameters: None
+
+10. `check_database_health`
+    - Get database health metrics
+    - Returns: Health status and statistics
+
+### Memory Management
+
+11. `delete_memory`
+    - Delete specific memory by hash
+    - Parameters:
+      - content_hash: String (required)
+
+12. `delete_by_tag`
+    - Delete all memories with specific tag
+    - Parameters:
+      - tag: String (required)
 
 ## Testing
 
@@ -30,4 +159,111 @@ Each test file includes:
 - Comprehensive test cases for the related functionality
 - Error case handling and validation
 
-[Rest of the README.md remains the same]
+## Storage Structure
+```
+/users/hkr/library/mobile documents/com~apple~clouddocs/ai/claude-memory/
+├── chroma_db/    # Main vector database
+└── backups/      # Automatic backups
+```
+
+## Project Structure
+```
+src/mcp_memory_service/
+├── __init__.py
+├── config.py
+├── models/
+│   ├── __init__.py
+│   └── memory.py      # Memory data models
+├── storage/
+│   ├── __init__.py
+│   ├── base.py        # Abstract base storage class
+│   └── chroma.py      # ChromaDB implementation
+├── utils/
+│   ├── __init__.py
+│   └── hashing.py     # Hashing utilities
+├── server.py          # Main MCP server
+└── tests/
+    ├── __init__.py
+    ├── test_memory_ops.py
+    ├── test_semantic_search.py
+    └── test_database.py
+```
+
+## Required Dependencies
+```
+chromadb==0.5.23
+sentence-transformers>=2.2.2
+tokenizers==0.20.3
+websockets>=11.0.3
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+```
+
+## Important Notes
+- Always ensure iCloud sync is complete before accessing from another device
+- Regular backups are crucial when testing new features
+- Monitor ChromaDB storage size in iCloud
+- The service includes automatic backup functionality that runs every 24 hours
+- Debug mode is available for troubleshooting semantic search results
+- Memory optimization runs automatically when database size exceeds configured thresholds
+
+## Performance Considerations
+- Default similarity threshold for semantic search: 0.7
+- Maximum recommended memories per query: 10
+- Automatic optimization triggers at 10,000 memories
+- Backup retention policy: 7 days
+
+## Troubleshooting
+- Check logs in `logs/memory_service.log`
+- Use debug_retrieve for investigating semantic search issues
+- Monitor ChromaDB health with check_database_health
+- Use exact_match_retrieve when semantic search gives unexpected results
+
+## Settings Configuration
+The service can be configured through environment variables or a config file:
+
+```
+CHROMA_DB_PATH: Path to ChromaDB storage
+BACKUP_PATH: Path for backups
+AUTO_BACKUP_INTERVAL: Backup interval in hours (default: 24)
+MAX_MEMORIES_BEFORE_OPTIMIZE: Threshold for auto-optimization (default: 10000)
+SIMILARITY_THRESHOLD: Default similarity threshold (default: 0.7)
+MAX_RESULTS_PER_QUERY: Maximum results per query (default: 10)
+BACKUP_RETENTION_DAYS: Number of days to keep backups (default: 7)
+LOG_LEVEL: Logging level (default: INFO)
+```
+
+## Development and Contributing
+
+### Setup Development Environment
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest tests/
+```
+
+### Code Style
+- Follow PEP 8 guidelines
+- Use type hints
+- Include docstrings for all functions and classes
+- Add tests for new features
+
+### Pull Request Process
+1. Create a feature branch
+2. Add tests for new functionality
+3. Update documentation
+4. Submit PR with description of changes
+
+## License
+MIT License - See LICENSE file for details
+
+## Acknowledgments
+- ChromaDB team for the vector database
+- Sentence Transformers project for embedding models
+- MCP project for the protocol specification
