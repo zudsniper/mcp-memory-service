@@ -1,24 +1,17 @@
-[project]
-name = "mcp-memory-service"
-version = "0.1.0"
-description = "A semantic memory service using ChromaDB and sentence-transformers"
-authors = [ { name = "Heinrich Krupp", email = "heinrich.krupp@gmail.com" }]
-license = { text = "MIT" }
-requires-python = ">=3.9"
-
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "python-semantic-release"]
 build-backend = "hatchling.build"
 
 [project]
 name = "mcp-memory-service"
-version = "0.1.0"
-description = "An MCP-based semantic memory service"
+version = "0.1.0"  # Remove dynamic and set explicit version
+description = "A semantic memory service using ChromaDB and sentence-transformers"
 readme = "README.md"
-requires-python = ">=3.10"  # Updated to match MCP requirements
+requires-python = ">=3.10"
 authors = [
-    { name = "Your Name", email = "your.email@example.com" }
+    { name = "Heinrich Krupp", email = "heinrich.krupp@gmail.com" }
 ]
+license = { text = "MIT" }
 dependencies = [
     "chromadb==0.5.23",
     "sentence-transformers>=2.2.2",
@@ -31,3 +24,45 @@ memory = "mcp_memory_service.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_memory_service"]
+
+[tool.hatch.version]
+path = "src/mcp_memory_service/__init__.py"
+
+[tool.semantic_release]
+version_variable = [
+    "src/mcp_memory_service/__init__.py:__version__",
+    "pyproject.toml:version"
+]
+branch = "main"
+changelog_file = "CHANGELOG.md"
+build_command = "python -m build"
+dist_path = "dist/"
+upload_to_pypi = true
+upload_to_release = true
+commit_message = "chore(release): bump version to {version}"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "style",
+    "refactor",
+    "test"
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+[tool.semantic_release.changelog]
+template_dir = "templates"
+changelog_sections = [
+    ["feat", "Features"],
+    ["fix", "Bug Fixes"],
+    ["perf", "Performance"],
+    ["refactor", "Code Refactoring"],
+    ["test", "Tests"]
+]
