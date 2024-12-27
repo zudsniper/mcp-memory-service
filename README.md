@@ -85,6 +85,8 @@ If "env" is missing, the default values will be used. The path to your ChromaDB 
      }
    }
    ```
+Sample use case:
+<img width="1112" alt="grafik" src="https://github.com/user-attachments/assets/502477d2-ade6-4a5e-a756-b6302d9d6931" />
 
 2. `retrieve_memory`
    - Perform semantic search for relevant memories
@@ -145,6 +147,12 @@ If "env" is missing, the default values will be used. The path to your ChromaDB 
 10. `check_database_health`
     - Get database health metrics
     - Returns: Health status and statistics
+
+Call by tool name:
+<img width="1112" alt="grafik" src="https://github.com/user-attachments/assets/23d161a8-f62c-41c6-bcd8-e9b16f369c95" />
+    
+11. `check_embedding_model`
+    - load and operational status
 
 ### Memory Management
 
