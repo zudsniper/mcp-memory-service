@@ -1,3 +1,4 @@
+# test_client.py
 import asyncio
 import websockets
 import json
@@ -23,17 +24,11 @@ async def test_memory_operations():
         test_memories = [
             {
                 "content": "Remember to update documentation for API changes",
-                "metadata": {
-                    "tags": ["task", "documentation"],
-                    "type": "todo"
-                }
+                "metadata": {"type": "todo"}
             },
             {
                 "content": "Team meeting notes: Discussed new feature rollout plan",
-                "metadata": {
-                    "tags": ["meeting", "notes"],
-                    "type": "notes"
-                }
+                "metadata": {"type": "notes"}
             }
         ]
 
@@ -60,18 +55,8 @@ async def test_memory_operations():
         response = await websocket.recv()
         logger.info(f"Search response: {json.dumps(json.loads(response), indent=2)}")
 
-        # 4. Test tag search
-        logger.info("\n4. Testing tag search...")
-        await websocket.send(json.dumps({
-            "method": "search_by_tag",
-            "params": {"tags": ["documentation"]},
-            "id": "tag_test"
-        }))
-        response = await websocket.recv()
-        logger.info(f"Tag search response: {json.dumps(json.loads(response), indent=2)}")
-
-        # 5. Get statistics
-        logger.info("\n5. Getting memory statistics...")
+        # 4. Get statistics
+        logger.info("\n4. Getting memory statistics...")
         await websocket.send(json.dumps({
             "method": "get_stats",
             "params": {},

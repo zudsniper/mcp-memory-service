@@ -1,3 +1,4 @@
+# test_management.py
 import asyncio
 import websockets
 import json
@@ -14,17 +15,11 @@ async def test_management_features():
         test_memories = [
             {
                 "content": "Important meeting with team tomorrow at 10 AM",
-                "metadata": {
-                    "tags": ["meeting", "important"],
-                    "type": "calendar"
-                }
+                "metadata": {"type": "calendar"}
             },
             {
                 "content": "Need to review the ML model performance metrics",
-                "metadata": {
-                    "tags": ["ml", "task"],
-                    "type": "todo"
-                }
+                "metadata": {"type": "todo"}
             }
         ]
 
@@ -68,11 +63,14 @@ async def test_management_features():
         response = await websocket.recv()
         logger.info(f"Optimization response: {json.dumps(json.loads(response), indent=2)}")
 
-        # 5. Verify data after optimization
+        # 5. Verify data after optimization through semantic search
         logger.info("\n5. Verifying data retrieval after optimization...")
         await websocket.send(json.dumps({
-            "method": "search_by_tag",
-            "params": {"tags": ["important"]},
+            "method": "retrieve_memory",
+            "params": {
+                "query": "important meeting tomorrow",
+                "n_results": 1
+            },
             "id": "verify_test"
         }))
         response = await websocket.recv()
