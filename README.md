@@ -2,6 +2,8 @@
 
 An MCP server providing semantic memory and persistent storage capabilities for Claude using ChromaDB and sentence transformers.
 
+<a href="https://glama.ai/mcp/servers/bzvl3lz34o"><img width="380" height="200" src="https://glama.ai/mcp/servers/bzvl3lz34o/badge" alt="Memory Service MCP server" /></a>
+
 ## Features
 
 - Semantic search using sentence transformers
