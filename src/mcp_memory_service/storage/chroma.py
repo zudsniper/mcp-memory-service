@@ -207,33 +207,33 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error retrieving memories: {str(e)}")
             return []
 
-    async def search_by_tag(self, tags: List[str]) -> List[Memory]:
-        """Search memories by tags using proper metadata filtering."""
-        try:
-            where_clause = {
-                "$and": [{"tags": {"$contains": tag}} for tag in tags]
-            }
+    # async def search_by_tag(self, tags: List[str]) -> List[Memory]:
+        # """Search memories by tags using proper metadata filtering."""
+        # try:
+        #     where_clause = {
+        #         "$and": [{"tags": {"$contains": tag}} for tag in tags]
+        #     }
             
-            results = self.collection.get(
-                where=where_clause
-            )
+        #     results = self.collection.get(
+        #         where=where_clause
+        #     )
             
-            if not results["ids"]:
-                return []
+        #     if not results["ids"]:
+        #         return []
             
-            memories = []
-            for i, doc in enumerate(results["documents"]):
-                metadata = results["metadatas"][i]
-                memory = Memory(
-                    content=doc,
-                    content_hash=metadata["content_hash"],
-                    tags=metadata.get("tags", []),
-                    memory_type=metadata.get("memory_type")
-                )
-                memories.append(memory)
+        #     memories = []
+        #     for i, doc in enumerate(results["documents"]):
+        #         metadata = results["metadatas"][i]
+        #         memory = Memory(
+        #             content=doc,
+        #             content_hash=metadata["content_hash"],
+        #             tags=metadata.get("tags", []),
+        #             memory_type=metadata.get("memory_type")
+        #         )
+        #         memories.append(memory)
             
-            return memories
+        #     return memories
             
-        except Exception as e:
-            logger.error(f"Error searching by tags: {str(e)}")
-            return []
+        # except Exception as e:
+        #     logger.error(f"Error searching by tags: {str(e)}")
+        #     return []
