@@ -1,5 +1,7 @@
 # MCP Memory Service
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 An MCP server providing semantic memory and persistent storage capabilities for Claude using ChromaDB and sentence transformers. This service enables long-term memory storage with semantic search capabilities, making it ideal for maintaining context across conversations.
 
 ## Features
