@@ -2,7 +2,7 @@ import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 import logging
-from typing import List, Dict, Any, Tuple, Set
+from typing import List, Dict, Any, Tuple, Set, Optional
 import time
 
 from .base import MemoryStorage
@@ -40,6 +40,31 @@ class ChromaMemoryStorage(MemoryStorage):
                 metadata={"hnsw:space": "cosine"}
             )
 
+    def _format_metadata_for_chroma(self, memory: Memory) -> Dict[str, Any]:
+        """Format metadata to be compatible with ChromaDB requirements."""
+        # ChromaDB expects simple types (str, int, float, bool)
+        metadata = {
+            "content_hash": memory.content_hash,
+            "tags": ",".join(memory.tags) if memory.tags else "",
+            "memory_type": memory.memory_type if memory.memory_type else "",
+            "timestamp": str(memory.timestamp.timestamp())
+        }
+        
+        # Add any additional metadata that's of simple types
+        for key, value in memory.metadata.items():
+            if isinstance(value, (str, int, float, bool)):
+                metadata[key] = value
+        
+        return metadata
+
+    def _generate_embedding(self, content: str) -> List[float]:
+        """Generate embedding for content."""
+        try:
+            return self.model.encode(content).tolist()
+        except Exception as e:
+            logger.error(f"Error generating embedding: {str(e)}")
+            raise
+
     async def store(self, memory: Memory) -> Tuple[bool, str]:
         """Store a memory with duplicate checking."""
         try:
@@ -52,7 +77,10 @@ class ChromaMemoryStorage(MemoryStorage):
             
             # Generate embedding if not provided
             if not memory.embedding:
-                memory.embedding = self.model.encode(memory.content).tolist()
+                memory.embedding = self._generate_embedding(memory.content)
+            
+            # Format metadata for ChromaDB
+            metadata = self._format_metadata_for_chroma(memory)
             
             # Generate ID and store
             memory_id = str(int(time.time() * 1000))
@@ -60,7 +88,7 @@ class ChromaMemoryStorage(MemoryStorage):
             self.collection.add(
                 embeddings=[memory.embedding],
                 documents=[memory.content],
-                metadatas=[memory.to_dict()],
+                metadatas=[metadata],
                 ids=[memory_id]
             )
             
@@ -72,21 +100,34 @@ class ChromaMemoryStorage(MemoryStorage):
     async def retrieve(self, query: str, n_results: int = 5) -> List[MemoryQueryResult]:
         """Retrieve memories using semantic search."""
         try:
-            query_embedding = self.model.encode(query).tolist()
+            # Generate query embedding
+            query_embedding = self._generate_embedding(query)
+            
+            # Query the collection
             results = self.collection.query(
                 query_embeddings=[query_embedding],
-                n_results=n_results
+                n_results=n_results,
+                include=["documents", "metadatas", "distances"]
             )
+            
+            if not results["ids"] or not results["ids"][0]:
+                return []
             
             memory_results = []
             for i in range(len(results["ids"][0])):
-                memory = Memory.from_dict(
-                    {
-                        "content": results["documents"][0][i],
-                        **results["metadatas"][0][i]
-                    },
-                    embedding=results["embeddings"][0][i] if "embeddings" in results else None
+                # Convert metadata back to Memory format
+                metadata = results["metadatas"][0][i]
+                tags = metadata.get("tags", "").split(",") if metadata.get("tags") else []
+                memory_type = metadata.get("memory_type", "")
+                
+                memory = Memory(
+                    content=results["documents"][0][i],
+                    content_hash=metadata["content_hash"],
+                    tags=[tag for tag in tags if tag],
+                    memory_type=memory_type if memory_type else None
                 )
+                
+                # Calculate cosine similarity from distance
                 relevance = 1 - results["distances"][0][i]
                 memory_results.append(MemoryQueryResult(memory, relevance))
             
@@ -96,27 +137,28 @@ class ChromaMemoryStorage(MemoryStorage):
             return []
 
     async def search_by_tag(self, tags: List[str]) -> List[Memory]:
-        """Search memories by tags using exact matching."""
+        """Search memories by tags."""
         try:
-            # Get all memories - we'll filter by tags in Python
-            # since ChromaDB doesn't support array contains operations
-            results = self.collection.get()
+            # Convert tags list to comma-separated string for search
+            tag_str = ",".join(tags)
+            results = self.collection.get(
+                where={"tags": {"$contains": tag_str}}
+            )
+            
+            if not results["ids"]:
+                return []
             
             memories = []
-            for i, metadata in enumerate(results["metadatas"]):
-                if not metadata.get("tags_str"):
-                    continue
-                    
-                memory_tags = set(metadata["tags_str"].split(","))
-                if any(tag in memory_tags for tag in tags):
-                    memory = Memory.from_dict(
-                        {
-                            "content": results["documents"][i],
-                            **metadata
-                        },
-                        embedding=results["embeddings"][i] if "embeddings" in results else None
-                    )
-                    memories.append(memory)
+            for i in range(len(results["ids"])):
+                metadata = results["metadatas"][i]
+                memory_tags = metadata.get("tags", "").split(",")
+                memory = Memory(
+                    content=results["documents"][i],
+                    content_hash=metadata["content_hash"],
+                    tags=[tag for tag in memory_tags if tag],
+                    memory_type=metadata.get("memory_type")
+                )
+                memories.append(memory)
             
             return memories
         except Exception as e:
@@ -126,14 +168,12 @@ class ChromaMemoryStorage(MemoryStorage):
     async def delete(self, content_hash: str) -> Tuple[bool, str]:
         """Delete a memory by its hash."""
         try:
-            # Get existing memory to confirm deletion
             existing = self.collection.get(
                 where={"content_hash": content_hash}
             )
             if not existing["ids"]:
                 return False, f"No memory found with hash {content_hash}"
             
-            # Delete the memory
             self.collection.delete(
                 where={"content_hash": content_hash}
             )
@@ -145,21 +185,17 @@ class ChromaMemoryStorage(MemoryStorage):
     async def delete_by_tag(self, tag: str) -> Tuple[int, str]:
         """Delete memories by tag."""
         try:
-            results = self.collection.get()
-            to_delete = []
+            results = self.collection.get(
+                where={"tags": {"$contains": tag}}
+            )
             
-            for i, metadata in enumerate(results["metadatas"]):
-                if metadata.get("tags_str"):
-                    memory_tags = set(metadata["tags_str"].split(","))
-                    if tag in memory_tags:
-                        to_delete.append(results["ids"][i])
+            if not results["ids"]:
+                return 0, f"No memories found with tag '{tag}'"
             
-            if to_delete:
-                self.collection.delete(
-                    ids=to_delete
-                )
-                return len(to_delete), f"Deleted {len(to_delete)} memories with tag '{tag}'"
-            return 0, f"No memories found with tag '{tag}'"
+            self.collection.delete(
+                ids=results["ids"]
+            )
+            return len(results["ids"]), f"Deleted {len(results['ids'])} memories with tag '{tag}'"
         except Exception as e:
             logger.error(f"Error deleting memories by tag: {str(e)}")
             return 0, f"Error deleting memories by tag: {str(e)}"
@@ -174,7 +210,6 @@ class ChromaMemoryStorage(MemoryStorage):
             for i, metadata in enumerate(results["metadatas"]):
                 content_hash = metadata.get("content_hash")
                 if not content_hash:
-                    # Generate hash if missing
                     content_hash = generate_content_hash(
                         results["documents"][i],
                         metadata

@@ -4,6 +4,7 @@ import logging
 import traceback
 import argparse
 import sys
+import json
 from typing import List
 
 from mcp.server.models import InitializationOptions
@@ -125,6 +126,49 @@ class MemoryServer:
                         "type": "object",
                         "properties": {}
                     }
+                ),
+                types.Tool(
+                    name="get_embedding",
+                    description="Get raw embedding vector for content",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string"}
+                        },
+                        "required": ["content"]
+                    }
+                ),
+                types.Tool(
+                    name="check_embedding_model",
+                    description="Check if embedding model is loaded and working",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
+                ),
+                types.Tool(
+                    name="debug_retrieve",
+                    description="Retrieve memories with debug information",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "n_results": {"type": "number", "default": 5},
+                            "similarity_threshold": {"type": "number", "default": 0.0}
+                        },
+                        "required": ["query"]
+                    }
+                ),
+                types.Tool(
+                    name="exact_match_retrieve",
+                    description="Retrieve memories using exact content match",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string"}
+                        },
+                        "required": ["content"]
+                    }
                 )
             ]
 
@@ -147,6 +191,14 @@ class MemoryServer:
                     return await self.handle_delete_by_tag(arguments)
                 elif name == "cleanup_duplicates":
                     return await self.handle_cleanup_duplicates(arguments)
+                elif name == "get_embedding":
+                    return await self.handle_get_embedding(arguments)
+                elif name == "check_embedding_model":
+                    return await self.handle_check_embedding_model(arguments)
+                elif name == "debug_retrieve":
+                    return await self.handle_debug_retrieve(arguments)
+                elif name == "exact_match_retrieve":
+                    return await self.handle_exact_match_retrieve(arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             except Exception as e:
@@ -201,14 +253,19 @@ class MemoryServer:
                 if result.memory.tags:
                     memory_info.append(f"Tags: {', '.join(result.memory.tags)}")
                 memory_info.append("---")
-                formatted_results.append("\n".join(memory_info))
+                formatted_results.append("\
+".join(memory_info))
             
             return [types.TextContent(
                 type="text",
-                text="Found the following memories:\n\n" + "\n".join(formatted_results)
+                text="Found the following memories:\
+\
+" + "\
+".join(formatted_results)
             )]
         except Exception as e:
-            logger.error(f"Error retrieving memories: {str(e)}\n{traceback.format_exc()}")
+            logger.error(f"Error retrieving memories: {str(e)}\
+{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error retrieving memories: {str(e)}")]
 
     async def handle_search_by_tag(self, arguments: dict) -> List[types.TextContent]:
@@ -241,7 +298,7 @@ class MemoryServer:
             
             return [types.TextContent(
                 type="text",
-                text="Found the following memories:\n\n" + "\n".join(formatted_results)
+                text="Found the following memories:\n\n".join(formatted_results)
             )]
         except Exception as e:
             logger.error(f"Error searching by tags: {str(e)}\n{traceback.format_exc()}")
@@ -260,6 +317,112 @@ class MemoryServer:
     async def handle_cleanup_duplicates(self, arguments: dict) -> List[types.TextContent]:
         count, message = await self.storage.cleanup_duplicates()
         return [types.TextContent(type="text", text=message)]
+
+    async def handle_get_embedding(self, arguments: dict) -> List[types.TextContent]:
+        content = arguments.get("content")
+        if not content:
+            return [types.TextContent(type="text", text="Error: Content is required")]
+        
+        try:
+            from .utils.debug import get_raw_embedding
+            result = get_raw_embedding(self.storage, content)
+            return [types.TextContent(
+                type="text",
+                text=f"Embedding results:\
+{json.dumps(result, indent=2)}"
+            )]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error getting embedding: {str(e)}")]
+
+    async def handle_check_embedding_model(self, arguments: dict) -> List[types.TextContent]:
+        try:
+            from .utils.debug import check_embedding_model
+            result = check_embedding_model(self.storage)
+            return [types.TextContent(
+                type="text",
+                text=f"Embedding model status:\
+{json.dumps(result, indent=2)}"
+            )]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error checking model: {str(e)}")]
+
+    async def handle_debug_retrieve(self, arguments: dict) -> List[types.TextContent]:
+        query = arguments.get("query")
+        n_results = arguments.get("n_results", 5)
+        similarity_threshold = arguments.get("similarity_threshold", 0.0)
+        
+        if not query:
+            return [types.TextContent(type="text", text="Error: Query is required")]
+        
+        try:
+            from .utils.debug import debug_retrieve_memory
+            results = await debug_retrieve_memory(
+                self.storage,
+                query,
+                n_results,
+                similarity_threshold
+            )
+            
+            if not results:
+                return [types.TextContent(type="text", text="No matching memories found")]
+            
+            formatted_results = []
+            for i, result in enumerate(results):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {result.memory.content}",
+                    f"Hash: {result.memory.content_hash}",
+                    f"Raw Similarity Score: {result.debug_info['raw_similarity']:.4f}",
+                    f"Raw Distance: {result.debug_info['raw_distance']:.4f}",
+                    f"Memory ID: {result.debug_info['memory_id']}"
+                ]
+                if result.memory.tags:
+                    memory_info.append(f"Tags: {', '.join(result.memory.tags)}")
+                memory_info.append("---")
+                formatted_results.append("\
+".join(memory_info))
+            
+            return [types.TextContent(
+                type="text",
+                text="Found the following memories:\
+\
+" + "\
+".join(formatted_results)
+            )]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error in debug retrieve: {str(e)}")]
+
+    async def handle_exact_match_retrieve(self, arguments: dict) -> List[types.TextContent]:
+        content = arguments.get("content")
+        if not content:
+            return [types.TextContent(type="text", text="Error: Content is required")]
+        
+        try:
+            from .utils.debug import exact_match_retrieve
+            memories = await exact_match_retrieve(self.storage, content)
+            
+            if not memories:
+                return [types.TextContent(type="text", text="No exact matches found")]
+            
+            formatted_results = []
+            for i, memory in enumerate(memories):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {memory.content}",
+                    f"Hash: {memory.content_hash}"
+                ]
+                
+                if memory.tags:
+                    memory_info.append(f"Tags: {', '.join(memory.tags)}")
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
+            
+            return [types.TextContent(
+                type="text",
+                text="Found the following exact matches:\n\n" + "\n".join(formatted_results)
+            )]
+        except Exception as e:
+            return [types.TextContent(type="text", text=f"Error in exact match retrieve: {str(e)}")]
 
 def parse_args():
     parser = argparse.ArgumentParser(

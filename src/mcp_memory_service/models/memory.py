@@ -1,3 +1,4 @@
+"""Memory-related data models."""
 from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -33,7 +34,7 @@ class Memory:
             content_hash=data["content_hash"],
             tags=[tag for tag in tags if tag],  # Filter out empty tags
             memory_type=data.get("type"),
-            timestamp=datetime.fromtimestamp(float(data["timestamp"])),
+            timestamp=datetime.fromtimestamp(float(data["timestamp"])) if "timestamp" in data else datetime.now(),
             metadata={k: v for k, v in data.items() if k not in 
                      ["content", "content_hash", "tags_str", "type", "timestamp"]},
             embedding=embedding
@@ -41,6 +42,7 @@ class Memory:
 
 @dataclass
 class MemoryQueryResult:
-    """Represents a memory query result with relevance score."""
+    """Represents a memory query result with relevance score and debug information."""
     memory: Memory
     relevance_score: float
+    debug_info: Dict[str, Any] = field(default_factory=dict)
