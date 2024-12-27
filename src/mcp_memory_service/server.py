@@ -5,6 +5,7 @@ import time
 import logging
 import chromadb
 import traceback
+import hashlib
 from sentence_transformers import SentenceTransformer
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -67,6 +68,14 @@ class MemoryServer:
         self.register_handlers()
         logger.info("Server initialization complete")
 
+    def _generate_hash(self, content: str, metadata: dict | None = None) -> str:
+        """Generate a unique hash for content and metadata to detect duplicates."""
+        hash_content = content
+        if metadata:
+            # Sort metadata keys for consistent hashing
+            hash_content += ",".join(f"{k}:{v}" for k, v in sorted(metadata.items()))
+        return hashlib.sha256(hash_content.encode()).hexdigest()
+
     def register_handlers(self):
         @self.server.list_tools()
         async def handle_list_tools() -> List[types.Tool]:
@@ -111,6 +120,36 @@ class MemoryServer:
                         },
                         "required": ["tags"]
                     }
+                ),
+                types.Tool(
+                    name="delete_memory",
+                    description="Delete a specific memory by its hash",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "content_hash": {"type": "string"}
+                        },
+                        "required": ["content_hash"]
+                    }
+                ),
+                types.Tool(
+                    name="delete_by_tag",
+                    description="Delete all memories with a specific tag",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "tag": {"type": "string"}
+                        },
+                        "required": ["tag"]
+                    }
+                ),
+                types.Tool(
+                    name="cleanup_duplicates",
+                    description="Find and remove duplicate entries",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {}
+                    }
                 )
             ]
 
@@ -127,11 +166,16 @@ class MemoryServer:
                     return await self.handle_retrieve_memory(arguments)
                 elif name == "search_by_tag":
                     return await self.handle_search_by_tag(arguments)
+                elif name == "delete_memory":
+                    return await self.handle_delete_memory(arguments)
+                elif name == "delete_by_tag":
+                    return await self.handle_delete_by_tag(arguments)
+                elif name == "cleanup_duplicates":
+                    return await self.handle_cleanup_duplicates(arguments)
                 else:
                     raise ValueError(f"Unknown tool: {name}")
             except Exception as e:
-                logger.error(f"Error in {name}: {str(e)}\
-{traceback.format_exc()}")
+                logger.error(f"Error in {name}: {str(e)}\n{traceback.format_exc()}")
                 return [types.TextContent(type="text", text=f"Error: {str(e)}")]
 
     async def handle_store_memory(self, arguments: dict) -> List[types.TextContent]:
@@ -152,6 +196,21 @@ class MemoryServer:
             
             processed_metadata["timestamp"] = str(time.time())
             
+            # Check for duplicates
+            content_hash = self._generate_hash(content, processed_metadata)
+            processed_metadata["content_hash"] = content_hash
+            
+            # Check if this content already exists
+            existing = self.collection.get(
+                where={"content_hash": content_hash},
+                limit=1
+            )
+            if existing["ids"]:
+                return [types.TextContent(
+                    type="text",
+                    text=f"Duplicate content detected, skipping storage"
+                )]
+            
             # Generate embedding and store
             embedding = self.model.encode(content).tolist()
             memory_id = str(int(time.time() * 1000))
@@ -168,8 +227,7 @@ class MemoryServer:
                 text=f"Successfully stored memory with ID: {memory_id}"
             )]
         except Exception as e:
-            logger.error(f"Error storing memory: {str(e)}\
-{traceback.format_exc()}")
+            logger.error(f"Error storing memory: {str(e)}\n{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error storing memory: {str(e)}")]
 
     async def handle_retrieve_memory(self, arguments: dict) -> List[types.TextContent]:
@@ -191,26 +249,19 @@ class MemoryServer:
             formatted_results = []
             for i in range(len(results["ids"][0])):
                 memory = (
-                    f"Memory {i+1}:\
-"
-                    f"Content: {results['documents'][0][i]}\
-"
-                    f"Relevance Score: {1 - results['distances'][0][i]:.2f}\
-"
+                    f"Memory {i+1}:\n"
+                    f"Content: {results['documents'][0][i]}\n"
+                    f"Relevance Score: {1 - results['distances'][0][i]:.2f}\n"
                     "---"
                 )
                 formatted_results.append(memory)
                 
             return [types.TextContent(
                 type="text",
-                text="Found the following memories:\
-\
-" + "\
-".join(formatted_results)
+                text="Found the following memories:\n\n" + "\n".join(formatted_results)
             )]
         except Exception as e:
-            logger.error(f"Error retrieving memories: {str(e)}\
-{traceback.format_exc()}")
+            logger.error(f"Error retrieving memories: {str(e)}\n{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error retrieving memories: {str(e)}")]
 
     async def handle_search_by_tag(self, arguments: dict) -> List[types.TextContent]:
@@ -231,12 +282,9 @@ class MemoryServer:
                     memory_tags = set(metadata["tags_str"].split(","))
                     if any(tag in memory_tags for tag in tags):
                         memory = (
-                            f"Memory {len(matching_memories)+1}:\
-"
-                            f"Content: {results['documents'][i]}\
-"
-                            f"Tags: {metadata['tags_str']}\
-"
+                            f"Memory {len(matching_memories)+1}:\n"
+                            f"Content: {results['documents'][i]}\n"
+                            f"Tags: {metadata['tags_str']}\n"
                             "---"
                         )
                         matching_memories.append(memory)
@@ -246,15 +294,81 @@ class MemoryServer:
             
             return [types.TextContent(
                 type="text",
-                text="Found the following memories:\
-\
-" + "\
-".join(matching_memories)
+                text="Found the following memories:\n\n" + "\n".join(matching_memories)
             )]
         except Exception as e:
-            logger.error(f"Error searching by tags: {str(e)}\
-{traceback.format_exc()}")
+            logger.error(f"Error searching by tags: {str(e)}\n{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error searching by tags: {str(e)}")]
+
+    async def handle_delete_memory(self, arguments: dict) -> List[types.TextContent]:
+        content_hash = arguments.get("content_hash")
+        if not content_hash:
+            return [types.TextContent(type="text", text="Error: Content hash is required")]
+        
+        try:
+            self.collection.delete(where={"content_hash": content_hash})
+            return [types.TextContent(
+                type="text",
+                text=f"Memory with hash {content_hash} deleted successfully"
+            )]
+        except Exception as e:
+            logger.error(f"Error deleting memory: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(type="text", text=f"Error deleting memory: {str(e)}")]
+
+    async def handle_delete_by_tag(self, arguments: dict) -> List[types.TextContent]:
+        tag = arguments.get("tag")
+        if not tag:
+            return [types.TextContent(type="text", text="Error: Tag is required")]
+        
+        try:
+            results = self.collection.get(
+                where={"tags_str": {"$contains": tag}}
+            )
+            if results["ids"]:
+                self.collection.delete(ids=results["ids"])
+                return [types.TextContent(
+                    type="text",
+                    text=f"Deleted {len(results['ids'])} memories with tag '{tag}'"
+                )]
+            return [types.TextContent(
+                type="text",
+                text=f"No memories found with tag '{tag}'"
+            )]
+        except Exception as e:
+            logger.error(f"Error deleting memories by tag: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(type="text", text=f"Error deleting memories by tag: {str(e)}")]
+
+    async def handle_cleanup_duplicates(self, arguments: dict) -> List[types.TextContent]:
+        """Find and remove any duplicate entries."""
+        try:
+            all_memories = self.collection.get()
+            seen_hashes = {}
+            duplicates = []
+
+            for i, (doc_id, content, metadata) in enumerate(zip(
+                all_memories["ids"],
+                all_memories["documents"],
+                all_memories["metadatas"]
+            )):
+                content_hash = self._generate_hash(content, metadata)
+                if content_hash in seen_hashes:
+                    duplicates.append(doc_id)
+                else:
+                    seen_hashes[content_hash] = doc_id
+
+            if duplicates:
+                self.collection.delete(ids=duplicates)
+                return [types.TextContent(
+                    type="text",
+                    text=f"Removed {len(duplicates)} duplicate memories"
+                )]
+            return [types.TextContent(
+                type="text",
+                text="No duplicates found"
+            )]
+        except Exception as e:
+            logger.error(f"Error cleaning up duplicates: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(type="text", text=f"Error cleaning up duplicates: {str(e)}")]
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -295,7 +409,7 @@ async def async_main():
                 write_stream,
                 InitializationOptions(
                     server_name="memory",
-                    server_version="0.1.0",
+                    server_version="0.2.0",  # Updated version to reflect new features
                     capabilities=memory_server.server.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},
@@ -303,8 +417,7 @@ async def async_main():
                 ),
             )
     except Exception as e:
-        logger.error(f"Server error: {str(e)}\
-{traceback.format_exc()}")
+        logger.error(f"Server error: {str(e)}\n{traceback.format_exc()}")
         raise
 
 def main():
@@ -313,8 +426,7 @@ def main():
     except KeyboardInterrupt:
         logger.info("Shutting down gracefully...")
     except Exception as e:
-        logger.error(f"Fatal error: {str(e)}\
-{traceback.format_exc()}")
+        logger.error(f"Fatal error: {str(e)}\n{traceback.format_exc()}")
         sys.exit(1)
 
 if __name__ == "__main__":
