@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-An MCP server providing semantic memory and persistent storage capabilities for Claude using ChromaDB and sentence transformers. This service enables long-term memory storage with semantic search capabilities, making it ideal for maintaining context across conversations.
+An MCP server providing semantic memory and persistent storage capabilities for Claude Desktop using ChromaDB and sentence transformers. This service enables long-term memory storage with semantic search capabilities, making it ideal for maintaining context across conversations and instances. For personal use only. No user management is provided.
 
 ## Features
 
@@ -62,6 +62,7 @@ Add the following to your `claude_desktop_config.json` file:
   }
 }
 ``` 
+If "env" is missing, the default values will be used. The path to your ChromaDB directory will be provided in the mcp server logs.
 
 ## Available Tools
 
@@ -187,14 +188,14 @@ Each test file includes:
 
 ## Storage Structure
 ```
-/users/hkr/library/mobile documents/com~apple~clouddocs/ai/claude-memory/
+../your_mcp_memory_service_directory/mcp-memory/ # or alternate path depending on config
 ├── chroma_db/    # Main vector database
 └── backups/      # Automatic backups
 ```
 
 ## Project Structure
 ```
-src/mcp_memory_service/
+../your_mcp_memory_service_directory/src/mcp_memory_service/
 ├── __init__.py
 ├── config.py
 ├── models/
@@ -240,7 +241,7 @@ pytest-asyncio>=0.21.0
 - Backup retention policy: 7 days
 
 ## Troubleshooting
-- Check logs in `logs/memory_service.log`
+- Check logs in `..\Claude\logs\mcp-server-memory.log`
 - Use debug_retrieve for investigating semantic search issues
 - Monitor ChromaDB health with check_database_health
 - Use exact_match_retrieve when semantic search gives unexpected results
