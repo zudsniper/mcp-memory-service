@@ -1,3 +1,11 @@
-"""MCP Memory Service - A semantic memory service using the Model Context Protocol."""
+from .models import Memory, MemoryQueryResult
+from .storage import MemoryStorage, ChromaMemoryStorage
+from .utils import generate_content_hash
 
-__version__ = "0.1.0"
+__all__ = [
+    'Memory',
+    'MemoryQueryResult',
+    'MemoryStorage',
+    'ChromaMemoryStorage',
+    'generate_content_hash'
+]

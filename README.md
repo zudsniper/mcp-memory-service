@@ -60,3 +60,19 @@ websockets>=11.0.3
 - Always ensure iCloud sync is complete before accessing from another device
 - Regular backups are crucial when testing new features
 - Monitor ChromaDB storage size in iCloud
+
+## Project Structure
+src/mcp_memory_service/
+├── __init__.py
+├── config.py
+├── models/
+│   ├── __init__.py
+│   └── memory.py      # Memory data models
+├── storage/
+│   ├── __init__.py
+│   ├── base.py        # Abstract base storage class
+│   └── chroma.py      # ChromaDB implementation
+├── utils/
+│   ├── __init__.py
+│   └── hashing.py     # Hashing utilities
+└── server.py          # Main MCP server

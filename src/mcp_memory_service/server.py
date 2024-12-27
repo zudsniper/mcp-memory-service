@@ -1,19 +1,25 @@
 import asyncio
 import os
-from typing import List 
-import time
 import logging
-import chromadb
 import traceback
-import hashlib
-from sentence_transformers import SentenceTransformer
+import argparse
+import sys
+from typing import List
+
 from mcp.server.models import InitializationOptions
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
-import argparse
-import sys
-from .config import CHROMA_PATH, BACKUPS_PATH
+
+from .config import (
+    CHROMA_PATH, 
+    BACKUPS_PATH, 
+    SERVER_NAME, 
+    SERVER_VERSION
+)
+from .storage.chroma import ChromaMemoryStorage
+from .models.memory import Memory
+from .utils.hashing import generate_content_hash
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +33,7 @@ os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 class MemoryServer:
     def __init__(self):
-        self.server = Server("memory")
+        self.server = Server(SERVER_NAME)
         
         # Initialize paths
         logger.info(f"Creating directories if they don't exist...")
@@ -35,31 +41,8 @@ class MemoryServer:
         os.makedirs(BACKUPS_PATH, exist_ok=True)
         
         try:
-            # Initialize embedding model
-            logger.info("Loading embedding model...")
-            self.model = SentenceTransformer('all-MiniLM-L6-v2')
-            
-            # Initialize ChromaDB
-            logger.info(f"Initializing ChromaDB at {CHROMA_PATH}...")
-            self.chroma_client = chromadb.PersistentClient(
-                path=CHROMA_PATH,
-                settings=chromadb.Settings(
-                    anonymized_telemetry=False,
-                    allow_reset=True,
-                    is_persistent=True,
-                    persist_directory=CHROMA_PATH
-                )
-            )
-            
-            try:
-                self.collection = self.chroma_client.get_collection(name="memory_collection")
-                logger.info("Found existing collection")
-            except Exception as e:
-                logger.info(f"Creating new collection (reason: {str(e)})")
-                self.collection = self.chroma_client.create_collection(
-                    name="memory_collection",
-                    metadata={"hnsw:space": "cosine"}
-                )
+            # Initialize storage
+            self.storage = ChromaMemoryStorage(CHROMA_PATH)
         except Exception as e:
             logger.error(f"Initialization error: {str(e)}")
             raise
@@ -67,14 +50,6 @@ class MemoryServer:
         # Register handlers
         self.register_handlers()
         logger.info("Server initialization complete")
-
-    def _generate_hash(self, content: str, metadata: dict | None = None) -> str:
-        """Generate a unique hash for content and metadata to detect duplicates."""
-        hash_content = content
-        if metadata:
-            # Sort metadata keys for consistent hashing
-            hash_content += ",".join(f"{k}:{v}" for k, v in sorted(metadata.items()))
-        return hashlib.sha256(hash_content.encode()).hexdigest()
 
     def register_handlers(self):
         @self.server.list_tools()
@@ -186,46 +161,18 @@ class MemoryServer:
             return [types.TextContent(type="text", text="Error: Content is required")]
         
         try:
-            # Process metadata
-            processed_metadata = {}
-            if metadata:
-                if "tags" in metadata:
-                    processed_metadata["tags_str"] = ",".join(metadata["tags"])
-                if "type" in metadata:
-                    processed_metadata["type"] = metadata["type"]
-            
-            processed_metadata["timestamp"] = str(time.time())
-            
-            # Check for duplicates
-            content_hash = self._generate_hash(content, processed_metadata)
-            processed_metadata["content_hash"] = content_hash
-            
-            # Check if this content already exists
-            existing = self.collection.get(
-                where={"content_hash": content_hash},
-                limit=1
-            )
-            if existing["ids"]:
-                return [types.TextContent(
-                    type="text",
-                    text=f"Duplicate content detected, skipping storage"
-                )]
-            
-            # Generate embedding and store
-            embedding = self.model.encode(content).tolist()
-            memory_id = str(int(time.time() * 1000))
-            
-            self.collection.add(
-                embeddings=[embedding],
-                documents=[content],
-                metadatas=[processed_metadata],
-                ids=[memory_id]
+            # Create memory object
+            content_hash = generate_content_hash(content, metadata)
+            memory = Memory(
+                content=content,
+                content_hash=content_hash,
+                tags=metadata.get("tags", []),
+                memory_type=metadata.get("type")
             )
             
-            return [types.TextContent(
-                type="text",
-                text=f"Successfully stored memory with ID: {memory_id}"
-            )]
+            # Store memory
+            success, message = await self.storage.store(memory)
+            return [types.TextContent(type="text", text=message)]
         except Exception as e:
             logger.error(f"Error storing memory: {str(e)}\n{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error storing memory: {str(e)}")]
@@ -238,24 +185,24 @@ class MemoryServer:
             return [types.TextContent(type="text", text="Error: Query is required")]
         
         try:
-            results = self.collection.query(
-                query_embeddings=[self.model.encode(query).tolist()],
-                n_results=n_results
-            )
+            results = await self.storage.retrieve(query, n_results)
             
-            if not results["documents"][0]:
+            if not results:
                 return [types.TextContent(type="text", text="No matching memories found")]
             
             formatted_results = []
-            for i in range(len(results["ids"][0])):
-                memory = (
-                    f"Memory {i+1}:\n"
-                    f"Content: {results['documents'][0][i]}\n"
-                    f"Relevance Score: {1 - results['distances'][0][i]:.2f}\n"
-                    "---"
-                )
-                formatted_results.append(memory)
-                
+            for i, result in enumerate(results):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {result.memory.content}",
+                    f"Hash: {result.memory.content_hash}",
+                    f"Relevance Score: {result.relevance_score:.2f}"
+                ]
+                if result.memory.tags:
+                    memory_info.append(f"Tags: {', '.join(result.memory.tags)}")
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
+            
             return [types.TextContent(
                 type="text",
                 text="Found the following memories:\n\n" + "\n".join(formatted_results)
@@ -271,30 +218,30 @@ class MemoryServer:
             return [types.TextContent(type="text", text="Error: Tags are required")]
         
         try:
-            results = self.collection.get()
+            memories = await self.storage.search_by_tag(tags)
             
-            if not results or not results.get("ids"):
-                return [types.TextContent(type="text", text="No memories found")]
+            if not memories:
+                return [types.TextContent(
+                    type="text",
+                    text=f"No memories found with tags: {', '.join(tags)}"
+                )]
             
-            matching_memories = []
-            for i, metadata in enumerate(results["metadatas"]):
-                if metadata and "tags_str" in metadata:
-                    memory_tags = set(metadata["tags_str"].split(","))
-                    if any(tag in memory_tags for tag in tags):
-                        memory = (
-                            f"Memory {len(matching_memories)+1}:\n"
-                            f"Content: {results['documents'][i]}\n"
-                            f"Tags: {metadata['tags_str']}\n"
-                            "---"
-                        )
-                        matching_memories.append(memory)
-            
-            if not matching_memories:
-                return [types.TextContent(type="text", text=f"No memories found with tags: {', '.join(tags)}")]
+            formatted_results = []
+            for i, memory in enumerate(memories):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {memory.content}",
+                    f"Hash: {memory.content_hash}",
+                    f"Tags: {', '.join(memory.tags)}"
+                ]
+                if memory.memory_type:
+                    memory_info.append(f"Type: {memory.memory_type}")
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
             
             return [types.TextContent(
                 type="text",
-                text="Found the following memories:\n\n" + "\n".join(matching_memories)
+                text="Found the following memories:\n\n" + "\n".join(formatted_results)
             )]
         except Exception as e:
             logger.error(f"Error searching by tags: {str(e)}\n{traceback.format_exc()}")
@@ -302,73 +249,17 @@ class MemoryServer:
 
     async def handle_delete_memory(self, arguments: dict) -> List[types.TextContent]:
         content_hash = arguments.get("content_hash")
-        if not content_hash:
-            return [types.TextContent(type="text", text="Error: Content hash is required")]
-        
-        try:
-            self.collection.delete(where={"content_hash": content_hash})
-            return [types.TextContent(
-                type="text",
-                text=f"Memory with hash {content_hash} deleted successfully"
-            )]
-        except Exception as e:
-            logger.error(f"Error deleting memory: {str(e)}\n{traceback.format_exc()}")
-            return [types.TextContent(type="text", text=f"Error deleting memory: {str(e)}")]
+        success, message = await self.storage.delete(content_hash)
+        return [types.TextContent(type="text", text=message)]
 
     async def handle_delete_by_tag(self, arguments: dict) -> List[types.TextContent]:
         tag = arguments.get("tag")
-        if not tag:
-            return [types.TextContent(type="text", text="Error: Tag is required")]
-        
-        try:
-            results = self.collection.get(
-                where={"tags_str": {"$contains": tag}}
-            )
-            if results["ids"]:
-                self.collection.delete(ids=results["ids"])
-                return [types.TextContent(
-                    type="text",
-                    text=f"Deleted {len(results['ids'])} memories with tag '{tag}'"
-                )]
-            return [types.TextContent(
-                type="text",
-                text=f"No memories found with tag '{tag}'"
-            )]
-        except Exception as e:
-            logger.error(f"Error deleting memories by tag: {str(e)}\n{traceback.format_exc()}")
-            return [types.TextContent(type="text", text=f"Error deleting memories by tag: {str(e)}")]
+        count, message = await self.storage.delete_by_tag(tag)
+        return [types.TextContent(type="text", text=message)]
 
     async def handle_cleanup_duplicates(self, arguments: dict) -> List[types.TextContent]:
-        """Find and remove any duplicate entries."""
-        try:
-            all_memories = self.collection.get()
-            seen_hashes = {}
-            duplicates = []
-
-            for i, (doc_id, content, metadata) in enumerate(zip(
-                all_memories["ids"],
-                all_memories["documents"],
-                all_memories["metadatas"]
-            )):
-                content_hash = self._generate_hash(content, metadata)
-                if content_hash in seen_hashes:
-                    duplicates.append(doc_id)
-                else:
-                    seen_hashes[content_hash] = doc_id
-
-            if duplicates:
-                self.collection.delete(ids=duplicates)
-                return [types.TextContent(
-                    type="text",
-                    text=f"Removed {len(duplicates)} duplicate memories"
-                )]
-            return [types.TextContent(
-                type="text",
-                text="No duplicates found"
-            )]
-        except Exception as e:
-            logger.error(f"Error cleaning up duplicates: {str(e)}\n{traceback.format_exc()}")
-            return [types.TextContent(type="text", text=f"Error cleaning up duplicates: {str(e)}")]
+        count, message = await self.storage.cleanup_duplicates()
+        return [types.TextContent(type="text", text=message)]
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -408,8 +299,8 @@ async def async_main():
                 read_stream,
                 write_stream,
                 InitializationOptions(
-                    server_name="memory",
-                    server_version="0.2.0",  # Updated version to reflect new features
+                    server_name=SERVER_NAME,
+                    server_version=SERVER_VERSION,
                     capabilities=memory_server.server.get_capabilities(
                         notification_options=NotificationOptions(),
                         experimental_capabilities={},
