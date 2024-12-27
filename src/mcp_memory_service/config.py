@@ -22,7 +22,7 @@ def validate_and_create_path(path: str) -> str:
             os.remove(test_file)
         except Exception as e:
             raise PermissionError(f"Directory {abs_path} is not writable: {str(e)}")
-        
+        logger.info(f"Directory {abs_path} is writable.")
         return abs_path
     except Exception as e:
         logger.error(f"Error validating path {path}: {str(e)}")

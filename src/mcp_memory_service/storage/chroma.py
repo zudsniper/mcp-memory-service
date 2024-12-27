@@ -98,12 +98,14 @@ class ChromaMemoryStorage(MemoryStorage):
             # First get all memories with the tag
             # Expected where operator to be one of $gt, $gte, $lt, $lte, $ne, $eq, $in, $nin.
             where_clause = {"tags": {"$in": [tag]}}  # Wrap single tag in list
-            
+            logger.info(f"Deleting memories with tag '{tag}' with where clause: {where_clause}")
+
             results = self.collection.get(
                 where=where_clause
             )
             
             if not results["ids"]:
+                logger.info(f"No memories found with tag '{tag}'")
                 return 0, f"No memories found with tag '{tag}'"
             
             # Delete all found memories
@@ -111,6 +113,7 @@ class ChromaMemoryStorage(MemoryStorage):
             self.collection.delete(
                 where={"tags": {"$in": [tag]}}
             )
+            logger.info(f"Successfully deleted {count} memories with tag '{tag}'")
             
             return count, f"Successfully deleted {count} memories with tag '{tag}'"
         except Exception as e:

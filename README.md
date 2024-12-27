@@ -26,16 +26,41 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 2. Install dependencies:
 ```bash
 pip install -r requirements.txt
+uv add mcp
+pip install -e .
 ```
 
 ## Usage
 
-1. Start the server:
+1. Start the server:(for testing purposes, it will run on port 8765) 
 ```bash
 python src/memory_server.py
 ```
 
 2. Connect to websocket at `ws://localhost:8765`
+
+
+## Claude MCP configuration
+
+Add the following to your `claude_desktop_config.json` file:
+
+```json
+{
+  "memory": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "your_mcp_memory_service_directory",  # e.g., "C:\\REPOSITORIES\\mcp-memory-service",
+      "run",
+      "memory"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "your_chroma_db_path",  # e.g., "C:\\Users\\John.Doe \\AppData\\Local\\mcp-memory\\chroma_db", 
+      "MCP_MEMORY_BACKUPS_PATH": "your_backups_path"  # e.g., "C:\\Users\\John.Doe \\AppData\\Local\\mcp-memory\\backups"
+    }
+  }
+}
+``` 
 
 ## Available Tools
 
