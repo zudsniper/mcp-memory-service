@@ -48,21 +48,21 @@ async def test_management_features():
                 "content": "Important meeting with team tomorrow at 10 AM",
                 "metadata": {
                     "type": "calendar",
-                    "tags_str": "meeting,important"
+                    "tags": "meeting,important"
                 }
             },
             {
                 "content": "Need to review the ML model performance metrics",
                 "metadata": {
                     "type": "todo",
-                    "tags_str": "ml,review"
+                    "tags": "ml,review"
                 }
             },
             {
                 "content": "Remember to backup the database weekly",
                 "metadata": {
                     "type": "reminder",
-                    "tags_str": "backup,database"
+                    "tags": "backup,database"
                 }
             }
         ]
@@ -72,7 +72,7 @@ async def test_management_features():
             print(f"Storing memory: {json.dumps(memory_data, indent=2)}")
             
             # Create Memory object directly
-            # tags = [tag.strip() for tag in memory_data["metadata"].get("tags_str", "").split(",") if tag.strip()]
+            # tags = [tag.strip() for tag in memory_data["metadata"].get("tags", "").split(",") if tag.strip()]
             # memory = Memory(
             #     content=memory_data["content"],
             #     content_hash=generate_content_hash(memory_data["content"], memory_data["metadata"]),
@@ -85,7 +85,7 @@ async def test_management_features():
             
             print(f"Store response: [{response[0].text}]")
             if "Successfully stored memory" in response[0].text:
-                tags = [tag.strip() for tag in memory_data["metadata"].get("tags_str", "").split(",") if tag.strip()]
+                tags = [tag.strip() for tag in memory_data["metadata"].get("tags", "").split(",") if tag.strip()]
                 memory = Memory(
                     content=memory_data["content"],
                     content_hash=generate_content_hash(memory_data["content"], memory_data["metadata"]),

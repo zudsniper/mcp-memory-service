@@ -281,7 +281,7 @@ class MemoryServer:
         
         try:
             # Normalize tags to a list
-            tags = metadata.get("tags_str", "")
+            tags = metadata.get("tags", "")
             if isinstance(tags, str):
                 tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
             else:

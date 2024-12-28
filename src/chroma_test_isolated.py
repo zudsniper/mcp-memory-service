@@ -134,8 +134,8 @@ class ChromaMemoryStorage:
                     
                     # Deserialize tags from the string
                    try:
-                       retrieved_tags_string = memory_meta.get("tags", "[]")
-                       retrieved_tags = json.loads(retrieved_tags_string)
+                       retrieved_tagsing = memory_meta.get("tags", "[]")
+                       retrieved_tags = json.loads(retrieved_tagsing)
                    except json.JSONDecodeError:
                         retrieved_tags = [] # Handle the case where the stored tags are not valid JSON
                     
@@ -167,8 +167,8 @@ class ChromaMemoryStorage:
             if results["ids"]:
                 for i, meta in enumerate(results["metadatas"]):
                     try:
-                        retrieved_tags_string = meta.get("tags", "[]")
-                        retrieved_tags = json.loads(retrieved_tags_string)
+                        retrieved_tagsing = meta.get("tags", "[]")
+                        retrieved_tags = json.loads(retrieved_tagsing)
                     except json.JSONDecodeError:
                         retrieved_tags = []
 
@@ -201,28 +201,28 @@ async def main():
         {
             "content": "Meeting with team tomorrow at 10 AM",
             "memory_type": "calendar",
-            "tags_str": "meeting,important"
+            "tags": "meeting,important"
         },
         {
             "content": "Review ML model performance metrics",
             "memory_type": "todo",
-            "tags_str": "ml,review"
+            "tags": "ml,review"
         },
         {
             "content": "Backup the database weekly",
             "memory_type": "reminder",
-            "tags_str": "backup,database"
+            "tags": "backup,database"
         },
         {
             "content": "Another meeting",
             "memory_type": "calendar",
-            "tags_str": "meeting,test"
+            "tags": "meeting,test"
         }
     ]
 
     stored_memories = []
     for data in memories_data:
-       tags = [tag.strip() for tag in data.get("tags_str", "").split(",") if tag.strip()]
+       tags = [tag.strip() for tag in data.get("tags", "").split(",") if tag.strip()]
        memory = Memory(
             content=data["content"],
             content_hash=generate_content_hash(data["content"], data),
