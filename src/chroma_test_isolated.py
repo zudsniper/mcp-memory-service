@@ -76,7 +76,7 @@ class ChromaMemoryStorage:
             if tag:
                 sanitized.append(tag)
                 
-        logger.info(f"****Sanitized: {json.dumps(sanitized)}")
+        logger.error(f"**************Sanitized: {json.dumps(sanitized)}")
         # Convert to JSON string
         return json.dumps(sanitized)
 
@@ -119,7 +119,7 @@ class ChromaMemoryStorage:
         except Exception as e:
             logger.error(f"Error storing memory: {str(e)}")
             return False
-
+        
     async def search_by_tag(self, tags: List[str]) -> List[Memory]:
        """Retrieves memories that match any of the specified tags."""
        try:
@@ -134,8 +134,8 @@ class ChromaMemoryStorage:
                     
                     # Deserialize tags from the string
                    try:
-                       retrieved_tagsing = memory_meta.get("tags", "[]")
-                       retrieved_tags = json.loads(retrieved_tagsing)
+                       retrieved_tags_string = memory_meta.get("tags", "[]")
+                       retrieved_tags = json.loads(retrieved_tags_string)
                    except json.JSONDecodeError:
                         retrieved_tags = [] # Handle the case where the stored tags are not valid JSON
                     
@@ -167,8 +167,8 @@ class ChromaMemoryStorage:
             if results["ids"]:
                 for i, meta in enumerate(results["metadatas"]):
                     try:
-                        retrieved_tagsing = meta.get("tags", "[]")
-                        retrieved_tags = json.loads(retrieved_tagsing)
+                        retrieved_tags_string = meta.get("tags", "[]")
+                        retrieved_tags = json.loads(retrieved_tags_string)
                     except json.JSONDecodeError:
                         retrieved_tags = []
 
@@ -201,28 +201,28 @@ async def main():
         {
             "content": "Meeting with team tomorrow at 10 AM",
             "memory_type": "calendar",
-            "tags": "meeting,important"
+            "tags_str": "meeting,important"
         },
         {
             "content": "Review ML model performance metrics",
             "memory_type": "todo",
-            "tags": "ml,review"
+            "tags_str": "ml,review"
         },
         {
             "content": "Backup the database weekly",
             "memory_type": "reminder",
-            "tags": "backup,database"
+            "tags_str": "backup,database"
         },
         {
             "content": "Another meeting",
             "memory_type": "calendar",
-            "tags": "meeting,test"
+            "tags_str": "meeting,test"
         }
     ]
 
     stored_memories = []
     for data in memories_data:
-       tags = [tag.strip() for tag in data.get("tags", "").split(",") if tag.strip()]
+       tags = [tag.strip() for tag in data.get("tags_str", "").split(",") if tag.strip()]
        memory = Memory(
             content=data["content"],
             content_hash=generate_content_hash(data["content"], data),
