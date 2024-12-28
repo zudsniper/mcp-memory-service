@@ -276,7 +276,7 @@ LOG_LEVEL: Logging level (default: INFO)
 ```bash
 # Create virtual environment
 python -m venv venv
-source venv/bin/activate
+source venv/bin/activate # On Windows: venv\Scripts\activate
 
 # Install dev dependencies
 pip install -r requirements-dev.txt
