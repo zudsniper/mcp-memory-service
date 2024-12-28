@@ -72,18 +72,27 @@ async def test_management_features():
             print(f"Storing memory: {json.dumps(memory_data, indent=2)}")
             
             # Create Memory object directly
-            tags = [tag.strip() for tag in memory_data["metadata"].get("tags_str", "").split(",") if tag.strip()]
-            memory = Memory(
-                content=memory_data["content"],
-                content_hash=generate_content_hash(memory_data["content"], memory_data["metadata"]),
-                tags=tags,
-                memory_type=memory_data["metadata"].get("type"),
-                metadata=memory_data["metadata"]
-            )
+            # tags = [tag.strip() for tag in memory_data["metadata"].get("tags_str", "").split(",") if tag.strip()]
+            # memory = Memory(
+            #     content=memory_data["content"],
+            #     content_hash=generate_content_hash(memory_data["content"], memory_data["metadata"]),
+            #     tags=tags,
+            #     memory_type=memory_data["metadata"].get("type"),
+            #     metadata=memory_data["metadata"]
+            # )
             
-            success, message = await memory_server.storage.store(memory)
-            print(f"Store response: [{success}, {message}]")
-            if success:
+            response = await memory_server.handle_store_memory(memory_data)
+            
+            print(f"Store response: [{response[0].text}]")
+            if "Successfully stored memory" in response[0].text:
+                tags = [tag.strip() for tag in memory_data["metadata"].get("tags_str", "").split(",") if tag.strip()]
+                memory = Memory(
+                    content=memory_data["content"],
+                    content_hash=generate_content_hash(memory_data["content"], memory_data["metadata"]),
+                    tags=tags,
+                    memory_type=memory_data["metadata"].get("type"),
+                    metadata=memory_data["metadata"]
+                )
                 stored_memories.append(memory)
 
         # 2. Test retrieve_memory

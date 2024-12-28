@@ -280,13 +280,23 @@ class MemoryServer:
             return [types.TextContent(type="text", text="Error: Content is required")]
         
         try:
+            # Normalize tags to a list
+            tags = metadata.get("tags_str", "")
+            if isinstance(tags, str):
+                tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+            else:
+                tags = []  # If tags is not a string, default to empty list to be consistent with the Memory Model
+
+            sanitized_tags = self.storage.sanitized(tags)
+            
             # Create memory object
             content_hash = generate_content_hash(content, metadata)
             memory = Memory(
                 content=content,
                 content_hash=content_hash,
-                tags=metadata.get("tags", []),
-                memory_type=metadata.get("type")
+                tags=tags,  # keep as a list for easier use in other methods
+                memory_type=metadata.get("type"),
+                metadata = {**metadata, "tags":sanitized_tags}  # include the stringified tags in the meta data
             )
             
             # Store memory
@@ -295,7 +305,7 @@ class MemoryServer:
         except Exception as e:
             logger.error(f"Error storing memory: {str(e)}\n{traceback.format_exc()}")
             return [types.TextContent(type="text", text=f"Error storing memory: {str(e)}")]
-
+    
     async def handle_retrieve_memory(self, arguments: dict) -> List[types.TextContent]:
         query = arguments.get("query")
         n_results = arguments.get("n_results", 5)
