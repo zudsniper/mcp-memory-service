@@ -1,13 +1,17 @@
 import chromadb
 import json
-from chromadb.utils import embedding_functions
-from sentence_transformers import SentenceTransformer
+import hashlib
 import logging
-from typing import List, Tuple, Dict
 import asyncio
+import os
+from typing import List, Tuple, Dict, Optional, Any
 from dataclasses import dataclass
+from sentence_transformers import SentenceTransformer
+from chromadb.utils import embedding_functions
 
-# Configure basic logging
+os.environ["CHROMA_DISABLE_TELEMETRY"] = "1"
+
+# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -17,264 +21,188 @@ class Memory:
     content_hash: str
     tags: List[str]
     memory_type: str
-    metadata: dict = None
+    metadata: Optional[Dict[str, Any]] = None
 
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
 
-
-def generate_content_hash(content, metadata):
-     return str(hash(content + json.dumps(metadata)))
-     
+def generate_content_hash(content: str, metadata: Dict[str, Any]) -> str:
+    """Generates a SHA-256 hash of the content and metadata."""
+    combined = content + json.dumps(metadata, sort_keys=True)  # Sort keys for consistent hashing
+    return hashlib.sha256(combined.encode()).hexdigest()
 
 class ChromaMemoryStorage:
-    def __init__(self, path: str = "chroma_test_db"):
-        """Initialize ChromaDB storage with proper embedding function."""
+    def __init__(self, path: str = "chroma_db"):
+        """Initializes ChromaDB storage."""
         self.path = path
-        
-        # Initialize sentence transformer first
         self.model = SentenceTransformer('all-MiniLM-L6-v2')
-        
-        # Create embedding function for ChromaDB
         self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name='all-MiniLM-L6-v2'
         )
-        
-        # Initialize ChromaDB with new client format
-        self.client = chromadb.PersistentClient(
-            path=path
-        )
-        
-        # Get or create collection with proper embedding function
         try:
+            self.client = chromadb.PersistentClient(path=self.path)
             self.collection = self.client.get_or_create_collection(
                 name="memory_collection",
                 metadata={"hnsw:space": "cosine"},
                 embedding_function=self.embedding_function
             )
-            logger.info("Collection initialized successfully")
+            logger.info("ChromaDB collection initialized successfully.")
         except Exception as e:
-            logger.error(f"Error initializing collection: {str(e)}")
+            logger.exception("Error initializing ChromaDB:")
             raise
 
-    def sanitized(self, tags):
+    def sanitize_tags(self, tags: Optional[Any]) -> List[str]:
+        """Sanitizes tags to ensure they are a list of non-empty strings."""
         if tags is None:
-            return json.dumps("")
-        
+            return []
+
         if isinstance(tags, str):
             tags = [tags]
         elif not isinstance(tags, list):
-            raise ValueError("Tags must be a string or list of strings")
-            
-        # Ensure all elements are strings and remove any invalid ones    
-        sanitized = []
-        for tag in tags:
-            if not isinstance(tag, str):
-                continue
-            tag = tag.strip()
-            if tag:
-                sanitized.append(tag)
-                
-        logger.info(f"****Sanitized: {json.dumps(sanitized)}")
-        # Convert to JSON string
-        return json.dumps(sanitized)
+            logger.warning(f"Invalid tag format: {type(tags)}. Expected string or list.")
+            return []
 
-    def _format_metadata_for_chroma(self, memory: Memory) -> dict:
-        """Formats metadata for ChromaDB, ensuring no list types are included."""
+        sanitized_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+        return sanitized_tags
+
+    def _format_metadata_for_chroma(self, memory: Memory) -> Dict[str, Any]:
+        """Formats metadata for ChromaDB."""
         metadata = {
             "type": memory.memory_type,
             "content_hash": memory.content_hash,
+            "tags": json.dumps(memory.tags) #memory.tags # Store tags as list in ChromaDB
         }
+        metadata.update(memory.metadata)
         return metadata
 
-    async def store(self, memory: Memory) -> Tuple[bool, str]:
-        """Store a memory with proper embedding handling."""
+    async def store(self, memory: Memory) -> Tuple[bool, Optional[str]]:
+        """Stores a memory in ChromaDB."""
         try:
-            # Check for duplicates
-            existing = self.collection.get(
-                where={"content_hash": memory.content_hash}
-            )
+            existing = self.collection.get(where={"content_hash": memory.content_hash})
             if existing["ids"]:
-                return False, "Duplicate content detected"
-            
-            # Format metadata properly
-            metadata = self._format_metadata_for_chroma(memory)
-            
-            # Add additional metadata
-            metadata.update(memory.metadata)
+                return False, "Duplicate content detected."
 
-            # Generate ID based on content hash
-            memory_id = memory.content_hash
-            
-            # Add to collection - embedding will be automatically generated
+            metadata = self._format_metadata_for_chroma(memory)
             self.collection.add(
                 documents=[memory.content],
                 metadatas=[metadata],
-                ids=[memory_id]
+                ids=[memory.content_hash]
             )
-            
-            return True, f"Successfully stored memory with ID: {memory_id}"
-            
+            return True, None
         except Exception as e:
-            logger.error(f"Error storing memory: {str(e)}")
-            return False
+            logger.exception("Error storing memory:")
+            return False, str(e)
 
     async def search_by_tag(self, tags: List[str]) -> List[Memory]:
-       """Retrieves memories that match any of the specified tags."""
-       try:
-           results = self.collection.get(
-               include=["metadatas", "documents"]
-           )
-
-           memories = []
-           if results["ids"]:
-               for i, doc in enumerate(results["documents"]):
-                   memory_meta = results["metadatas"][i]
-                    
-                    # Deserialize tags from the string
-                   try:
-                       retrieved_tagsing = memory_meta.get("tags", "[]")
-                       retrieved_tags = json.loads(retrieved_tagsing)
-                   except json.JSONDecodeError:
-                        retrieved_tags = [] # Handle the case where the stored tags are not valid JSON
-                    
-                   # Check if any of the searched tags are in the retrieved tags list
-                   if any(tag in retrieved_tags for tag in tags):
-                       memory = Memory(
-                           content=doc,
-                           content_hash=memory_meta["content_hash"],
-                           tags=retrieved_tags,
-                           memory_type=memory_meta.get("type")
-                        )
-                       memories.append(memory)
-            
-           return memories
-        
-       except Exception as e:
-           logger.error(f"Error searching by tags: {e}")
-           return []
-    
-    async def delete_by_tag(self, tag: str) -> Tuple[int, str]:
-        """Deletes memories that match the specified tag."""
+        """Retrieves memories matching any of the specified tags."""
         try:
-            # Get all the documents from ChromaDB
-            results = self.collection.get(
-                include=["metadatas"]
-            )
+            results = self.collection.get(include=["metadatas", "documents"])
+            memories = []
+            for i, doc in enumerate(results["documents"]):
+                metadata = results["metadatas"][i]
+                try:
+                    retrieved_tags = json.loads(metadata.get("tags", "[]"))
+                except json.JSONDecodeError:
+                    retrieved_tags = []
+                    logger.warning(f"Invalid JSON in tags metadata: {metadata.get('tags')}")
+                if any(tag in retrieved_tags for tag in tags):
+                    mem = Memory(
+                        content=doc,
+                        content_hash=metadata["content_hash"],
+                        tags=retrieved_tags,
+                        memory_type=metadata.get("type"),
+                        metadata={k: v for k, v in metadata.items() if k not in ["type", "content_hash", "tags"]}
+                    )
+                    memories.append(mem)
+            return memories
+        except Exception as e:
+            logger.exception("Error searching by tags:")
+            return []
 
+    async def delete_by_tag(self, tag: str) -> Tuple[int, Optional[str]]:
+        """Deletes memories with the specified tag."""
+        try:
+            results = self.collection.get(include=["metadatas"])
             ids_to_delete = []
-            if results["ids"]:
-                for i, meta in enumerate(results["metadatas"]):
-                    try:
-                        retrieved_tagsing = meta.get("tags", "[]")
-                        retrieved_tags = json.loads(retrieved_tagsing)
-                    except json.JSONDecodeError:
-                        retrieved_tags = []
-
-                    if tag in retrieved_tags:
-                        ids_to_delete.append(results["ids"][i])
+            for i, meta in enumerate(results["metadatas"]):
+                try:
+                    retrieved_tags = json.loads(meta.get("tags", "[]"))
+                except json.JSONDecodeError:
+                    retrieved_tags = []
+                    logger.warning(f"Invalid JSON in tags metadata: {meta.get('tags')}")
+                # The crucial fix is here: compare with elements of the list
+                if tag in retrieved_tags:
+                    ids_to_delete.append(results["ids"][i])
 
             if not ids_to_delete:
                 return 0, f"No memories found with tag: {tag}"
 
-            # Delete memories
             self.collection.delete(ids=ids_to_delete)
-
-            return len(ids_to_delete), f"Successfully deleted {len(ids_to_delete)} memories with tag: {tag}"
-
+            return len(ids_to_delete), None
         except Exception as e:
-            logger.error(f"Error deleting memories by tag: {e}")
-            return 0, f"Error deleting memories by tag: {e}"
+            logger.exception("Error deleting memories by tag:")
+            return 0, str(e)
+
 
     async def cleanup(self):
-      """Cleans the database"""
-      self.client.delete_collection(name="memory_collection")
-      logger.info("Collection deleted")
-      
-    
+        """Cleans up the collection."""
+        try:
+            self.client.delete_collection(name="memory_collection")
+            logger.info("ChromaDB collection deleted.")
+        except Exception as e:
+            logger.exception("Error deleting ChromaDB collection:")
+
+
 async def main():
     storage = ChromaMemoryStorage()
 
-    # Sample data
-    memories_data = [
-        {
-            "content": "Meeting with team tomorrow at 10 AM",
-            "memory_type": "calendar",
-            "tags": "meeting,important"
-        },
-        {
-            "content": "Review ML model performance metrics",
-            "memory_type": "todo",
-            "tags": "ml,review"
-        },
-        {
-            "content": "Backup the database weekly",
-            "memory_type": "reminder",
-            "tags": "backup,database"
-        },
-        {
-            "content": "Another meeting",
-            "memory_type": "calendar",
-            "tags": "meeting,test"
-        }
-    ]
+    mem_data = [
+        {"content": "Meeting with team tomorrow at 10 AM", "memory_type": "calendar", "tags": ["meeting", "important"]},
+        {"content": "Review ML model performance metrics", "memory_type": "todo", "tags": ["ml", "review"]},
+        {"content": "Another meeting", "memory_type": "calendar", "tags": ["meeting", "test"]},
+        {"content": "unrelated", "memory_type": "note", "tags": ["note"]},
+        {"content": "Tagging test", "memory_type": "info", "tags": ['technical', 'test']},
+        {"content": "Review ML model performance metrics", "memory_type": "todo", "tags": "ml,review"},
+    ] # checking for different tag formats
 
-    stored_memories = []
-    for data in memories_data:
-       tags = [tag.strip() for tag in data.get("tags", "").split(",") if tag.strip()]
-       memory = Memory(
-            content=data["content"],
-            content_hash=generate_content_hash(data["content"], data),
-            tags=tags,
-            memory_type=data["memory_type"],
-           metadata = {"tags":storage.sanitized(tags), **data}
-        )
+    for data in mem_data:
+        tags = storage.sanitize_tags(data["tags"]) # Sanitize before creating the hash
+        mem = Memory(content=data["content"], content_hash=generate_content_hash(data["content"], data), tags=tags, memory_type=data["memory_type"])
+        success, err = await storage.store(mem)
+        logger.info(f"Store result for '{mem.content}': {success}, {err}")
 
-       success, message = await storage.store(memory)
-       logger.info(f"Store response: [{success}, {message}]")
-       if success:
-            stored_memories.append(memory)
+    # Search and delete "meeting"
+    res = await storage.search_by_tag(["meeting"])
+    logger.info(f"Search results for tag 'meeting' before deletion: {len(res)}")
+    for r in res:
+        logger.info(f"  {r}")
 
+    count, err = await storage.delete_by_tag("meeting")
+    logger.info(f"Delete count for tag 'meeting': {count}, {err}")
 
-    # Search by tag
-    search_tag = "meeting"
-    logger.info(f"Searching for memories with tag: {search_tag}")
-    tag_results = await storage.search_by_tag([search_tag])
-    logger.info(f"Found {len(tag_results)} memories with tag '{search_tag}'")
-    for memory in tag_results:
-        logger.info(f"  Content: {memory.content}")
-        logger.info(f"  Tags: {memory.tags}")
+    res = await storage.search_by_tag(["meeting"])
+    logger.info(f"Search results for tag 'meeting' after deletion: {len(res)}")
+    for r in res:
+        logger.info(f"  {r}")
+        
+    res = await storage.search_by_tag(["ml"])
+    logger.info(f"Search results for tag 'ml' after deletion of 'meeting': {len(res)}")
+    for r in res:
+        logger.info(f" {r}")
+        
+    res = await storage.search_by_tag(["note"])
+    logger.info(f"Search results for tag 'note' after deletion of 'meeting': {len(res)}")
+    for r in res:
+        logger.info(f" {r}")
     
-    # Search for "ml"
-    search_tag = "ml"
-    logger.info(f"Searching for memories with tag: {search_tag}")
-    tag_results = await storage.search_by_tag([search_tag])
-    logger.info(f"Found {len(tag_results)} memories with tag '{search_tag}'")
-    for memory in tag_results:
-        logger.info(f"  Content: {memory.content}")
-        logger.info(f"  Tags: {memory.tags}")
+    res = await storage.search_by_tag(["technical"])
+    logger.info(f"Search results for tag 'technical' after deletion of 'meeting': {len(res)}")
+    for r in res:
+        logger.info(f" {r}")
 
-    # Delete by tag
-    delete_tag = "meeting"
-    logger.info(f"Deleting memories with tag: {delete_tag}")
-    count, message = await storage.delete_by_tag(delete_tag)
-    logger.info(f"Delete by tag result: {message}, count:{count}")
-
-
-    # verify deletion
-    search_tag = "meeting"
-    logger.info(f"Searching for memories with tag: {search_tag}")
-    tag_results = await storage.search_by_tag([search_tag])
-    logger.info(f"Found {len(tag_results)} memories with tag '{search_tag}'")
-
-    for memory in tag_results:
-        logger.info(f"  Content: {memory.content}")
-        logger.info(f"  Tags: {memory.tags}")
-    
-    # Clean up database
     await storage.cleanup()
-
+    logger.info("Cleanup complete")
 
 if __name__ == "__main__":
     asyncio.run(main())
