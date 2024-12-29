@@ -8,8 +8,28 @@ from typing import List, Tuple, Dict, Optional, Any
 from dataclasses import dataclass
 from sentence_transformers import SentenceTransformer
 from chromadb.utils import embedding_functions
+from mcp_memory_service.models.memory import Memory,MemoryQueryResult
 
 os.environ["CHROMA_DISABLE_TELEMETRY"] = "1"
+
+import time
+
+start_timestamp = time.time()  # Current time
+end_timestamp = start_timestamp + 60 * 60  # One hour from now
+
+# Or for specific dates:
+from datetime import datetime
+
+def create_datetime(year, month, day, hour, minute, second):
+    return datetime(year, month, day, hour, minute, second)
+
+# Create datetime objects for January 1 and December 31 of the current year 
+dt = create_datetime(datetime.now().year, 1, 1, 12, 0, 0)  # January 1, current year, 12:00:00
+start_timestamp = dt.timestamp()
+
+dt2 = create_datetime(datetime.now().year, 12, 31, 12, 0, 0)  # December 31, current year, 12:00:00
+end_timestamp = dt2.timestamp()
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,11 +42,17 @@ class Memory:
     tags: List[str]
     memory_type: str
     metadata: Optional[Dict[str, Any]] = None
+    timestamp: float = time.time()  # Add timestamp with default current time
 
     def __post_init__(self):
         if self.metadata is None:
             self.metadata = {}
 
+@dataclass
+class MemoryQueryResult:
+    memory: Memory
+    similarity: Optional[float] = None
+    
 def generate_content_hash(content: str, metadata: Dict[str, Any]) -> str:
     """Generates a SHA-256 hash of the content and metadata."""
     combined = content + json.dumps(metadata, sort_keys=True)  # Sort keys for consistent hashing
@@ -71,7 +97,8 @@ class ChromaMemoryStorage:
         metadata = {
             "type": memory.memory_type,
             "content_hash": memory.content_hash,
-            "tags": json.dumps(memory.tags) #memory.tags # Store tags as list in ChromaDB
+            "tags": json.dumps(memory.tags) if memory.tags else None,  # Store tags as list in ChromaDB
+            "timestamp": memory.timestamp,  # Include the timestamp in the metadata
         }
         metadata.update(memory.metadata)
         return metadata
@@ -101,6 +128,7 @@ class ChromaMemoryStorage:
             memories = []
             for i, doc in enumerate(results["documents"]):
                 metadata = results["metadatas"][i]
+                logger.info(f"Retrieved memory timestamp: {metadata.get('timestamp')}")
                 try:
                     retrieved_tags = json.loads(metadata.get("tags", "[]"))
                 except json.JSONDecodeError:
@@ -144,6 +172,51 @@ class ChromaMemoryStorage:
             logger.exception("Error deleting memories by tag:")
             return 0, str(e)
 
+    async def recall(self, n_results: int = 5, start_timestamp: Optional[float] = None, end_timestamp: Optional[float] = None) -> List["MemoryQueryResult"]:
+        try:
+            where_clause = {}
+            if start_timestamp is not None and end_timestamp is not None:
+                where_clause = {
+                    "$and": [
+                        {"timestamp": {"$gte": start_timestamp}},
+                        {"timestamp": {"$lte": end_timestamp}}
+                    ]
+                }
+            logger.info(f"Where clause: {where_clause}")
+
+            results = self.collection.get(
+                where=where_clause,
+                limit=n_results,
+                include=["metadatas", "documents"] # Removed "distances" here
+            )
+
+            if not results.get("ids") or not results["ids"]:
+                logger.info("No memories found matching the criteria.")
+                return []
+            
+            memory_results = []
+            for i in range(len(results["ids"])):
+                metadata = results["metadatas"][i]
+                try:
+                    retrieved_tags = json.loads(metadata.get("tags", "[]"))
+                except json.JSONDecodeError:
+                    retrieved_tags = []
+                    logger.warning(f"Invalid JSON in tags metadata: {metadata.get('tags')}")
+                memory = Memory(
+                    content=results["documents"][i],
+                    content_hash=metadata["content_hash"],
+                    tags=retrieved_tags,
+                    memory_type=metadata.get("type", ""),
+                    timestamp=metadata.get("timestamp"),
+                    metadata={k: v for k, v in metadata.items() if k not in ["type", "content_hash", "tags", "timestamp"]}
+                )
+                memory_results.append(MemoryQueryResult(memory)) # Removed similarity here
+
+            return memory_results
+
+        except Exception as e:
+            logger.error(f"Error retrieving memories: {str(e)}")
+            return []
 
     async def cleanup(self):
         """Cleans up the collection."""
@@ -152,7 +225,6 @@ class ChromaMemoryStorage:
             logger.info("ChromaDB collection deleted.")
         except Exception as e:
             logger.exception("Error deleting ChromaDB collection:")
-
 
 async def main():
     storage = ChromaMemoryStorage()
@@ -177,32 +249,49 @@ async def main():
     logger.info(f"Search results for tag 'meeting' before deletion: {len(res)}")
     for r in res:
         logger.info(f"  {r}")
-
+    
+    # Delete "meeting"
     count, err = await storage.delete_by_tag("meeting")
     logger.info(f"Delete count for tag 'meeting': {count}, {err}")
 
+    # Search again
     res = await storage.search_by_tag(["meeting"])
     logger.info(f"Search results for tag 'meeting' after deletion: {len(res)}")
     for r in res:
         logger.info(f"  {r}")
-        
+    
+    # Search for "ml"
     res = await storage.search_by_tag(["ml"])
     logger.info(f"Search results for tag 'ml' after deletion of 'meeting': {len(res)}")
     for r in res:
         logger.info(f" {r}")
-        
+    
+    # Search for "note"
     res = await storage.search_by_tag(["note"])
     logger.info(f"Search results for tag 'note' after deletion of 'meeting': {len(res)}")
     for r in res:
         logger.info(f" {r}")
     
+    # Search for "test"
+    res = await storage.search_by_tag(["test"])
+    logger.info(f"Search results for tag 'test' after deletion of 'meeting': {len(res)}")
+    for r in res:
+        logger.info(f" {r}")
+    
+    # Search for "technical"
     res = await storage.search_by_tag(["technical"])
     logger.info(f"Search results for tag 'technical' after deletion of 'meeting': {len(res)}")
     for r in res:
         logger.info(f" {r}")
+    
+    # Search by timestamp
+    res = await storage.recall(start_timestamp=start_timestamp, end_timestamp=end_timestamp)
+    logger.info(f"Search results for start_timestamp: {start_timestamp}, end_timestamp: {end_timestamp}: {len(res)}")
+    for r in res:
+        logger.info(f" {r}")
 
-    await storage.cleanup()
-    logger.info("Cleanup complete")
+    # await storage.cleanup()
+    # logger.info("Cleanup complete")
 
 if __name__ == "__main__":
     asyncio.run(main())
