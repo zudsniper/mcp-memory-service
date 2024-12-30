@@ -36,12 +36,14 @@ pip install -e .
 
 ## Usage
 
-1. Start the server:(for testing purposes, it will run on port 8765) 
+1. Start the server:(for testing purposes) 
 ```bash
-python src/memory_server.py
+python src/test_management.py 
 ```
-
-2. Connect to websocket at `ws://localhost:8765`
+Isaolated test for methods
+```bash
+python src/chroma_test_isolated.py
+```
 
 ## Claude MCP configuration
 
