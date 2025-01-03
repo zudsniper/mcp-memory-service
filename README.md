@@ -19,6 +19,31 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 - Duplicate detection and cleanup
 - Customizable embedding model
 
+## Key operations you can perform with your memory database:
+
+1. Store New Memories
+   - You can store new information with optional tags and metadata
+   - Good for saving important information you want to retrieve later
+
+2. Retrieve & Search
+   - Search by semantic similarity using a query
+   - Search by specific tags
+   - Perform exact content matches
+   - Debug-level retrieval with similarity thresholds
+
+3. Memory Management
+   - Delete specific memories using their content hash
+   - Delete all memories with a specific tag
+   - Clean up duplicate entries
+
+4. Technical Operations
+   - Get raw embedding vectors for content
+   - Check if the embedding model is working
+   - Monitor database health
+
+Sample use case:
+<img width="750" alt="grafik" src="https://github.com/user-attachments/assets/4bc854c6-721a-4abe-bcc5-7ef274628db7" />
+
 ## Installation
 
 1. Create Python virtual environment:
