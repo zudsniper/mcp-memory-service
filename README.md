@@ -40,8 +40,6 @@ An MCP server providing semantic memory and persistent storage capabilities for 
    - Get raw embedding vectors for content
    - Check if the embedding model is working
    - Monitor database health
-
-Sample use case:
 <img width="750" alt="grafik" src="https://github.com/user-attachments/assets/4bc854c6-721a-4abe-bcc5-7ef274628db7" />
 
 ## Installation
