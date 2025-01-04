@@ -51,35 +51,42 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error initializing collection: {str(e)}")
             raise
 
+    # def sanitized(self, tags):
+        # if tags is None:
+        #     return json.dumps("")
+        
+        # if isinstance(tags, str):
+        #     tags = [tags]
+        # elif not isinstance(tags, list):
+        #     raise ValueError("Tags must be a string or list of strings")
+            
+        # # Ensure all elements are strings and remove any invalid ones    
+        # sanitized = []
+        # for tag in tags:
+        #     if not isinstance(tag, str):
+        #         continue
+        #     tag = tag.strip()
+        #     if tag:
+        #         sanitized.append(tag)
+                
+        # logger.info(f"****Sanitized: {json.dumps(sanitized)}")
+        # # Convert to JSON string
+        # return json.dumps(sanitized)
     def sanitized(self, tags):
         if tags is None:
-            return json.dumps("")
+            return json.dumps([])
         
+        # If we get a string, split it into an array
         if isinstance(tags, str):
-            tags = [tags]
-        elif not isinstance(tags, list):
-            raise ValueError("Tags must be a string or list of strings")
-            
-        # Ensure all elements are strings and remove any invalid ones    
-        sanitized = []
-        for tag in tags:
-            if not isinstance(tag, str):
-                continue
-            tag = tag.strip()
-            if tag:
-                sanitized.append(tag)
+            tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+        # If we get an array, use it directly
+        elif isinstance(tags, list):
+            tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+        else:
+            return json.dumps([])
                 
-        logger.info(f"****Sanitized: {json.dumps(sanitized)}")
-        # Convert to JSON string
-        return json.dumps(sanitized)
-
-    def _format_metadata_for_chroma(self, memory: Memory) -> dict:
-        """Formats metadata for ChromaDB, ensuring no list types are included."""
-        metadata = {
-            "type": memory.memory_type,
-            "content_hash": memory.content_hash,
-        }
-        return metadata
+        # Return JSON string representation of the array
+        return json.dumps(tags)
 
     async def store(self, memory: Memory) -> Tuple[bool, str]:
         """Store a memory with proper embedding handling."""
@@ -113,41 +120,117 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error storing memory: {str(e)}")
             return False
 
-    async def search_by_tag(self, tags: List[str]) -> List[Memory]:
-       """Retrieves memories that match any of the specified tags."""
-       try:
-           results = self.collection.get(
-               include=["metadatas", "documents"]
-           )
+    # async def search_by_tag(self, tags: List[str]) -> List[Memory]:
+    #    """Retrieves memories that match any of the specified tags."""
+    #    try:
+    #        results = self.collection.get(
+    #            include=["metadatas", "documents"]
+    #        )
 
-           memories = []
-           if results["ids"]:
-               for i, doc in enumerate(results["documents"]):
-                   memory_meta = results["metadatas"][i]
+    #        memories = []
+    #        if results["ids"]:
+    #            for i, doc in enumerate(results["documents"]):
+    #                memory_meta = results["metadatas"][i]
                     
-                    # Deserialize tags from the string
-                   try:
-                       retrieved_tags_string = memory_meta.get("tags", "[]")
-                       retrieved_tags = json.loads(retrieved_tags_string)
-                   except json.JSONDecodeError:
-                        retrieved_tags = [] # Handle the case where the stored tags are not valid JSON
+    #                 # Deserialize tags from the string
+    #                try:
+    #                    retrieved_tags_string = memory_meta.get("tags", "[]")
+    #                    retrieved_tags = json.loads(retrieved_tags_string)
+    #                except json.JSONDecodeError:
+    #                     retrieved_tags = [] # Handle the case where the stored tags are not valid JSON
                     
-                   # Check if any of the searched tags are in the retrieved tags list
-                   if any(tag in retrieved_tags for tag in tags):
-                       memory = Memory(
-                           content=doc,
-                           content_hash=memory_meta["content_hash"],
-                           tags=retrieved_tags,
-                           memory_type=memory_meta.get("type")
-                        )
-                       memories.append(memory)
+    #                # Check if any of the searched tags are in the retrieved tags list
+    #                if any(tag in retrieved_tags for tag in tags):
+    #                    memory = Memory(
+    #                        content=doc,
+    #                        content_hash=memory_meta["content_hash"],
+    #                        tags=retrieved_tags,
+    #                        memory_type=memory_meta.get("type")
+    #                     )
+    #                    memories.append(memory)
             
-           return memories
+    #        return memories
         
-       except Exception as e:
-           logger.error(f"Error searching by tags: {e}")
-           return []
-    
+    #    except Exception as e:
+    #        logger.error(f"Error searching by tags: {e}")
+    #        return []
+
+    # async def search_by_tag(self, tags: List[str]) -> List[Memory]:
+    #     """Retrieves memories that match any of the specified tags."""
+    #     try:
+    #         results = self.collection.get(
+    #             include=["metadatas", "documents"]
+    #         )
+
+    #         memories = []
+    #         if results["ids"]:
+    #             for i, doc in enumerate(results["documents"]):
+    #                 memory_meta = results["metadatas"][i]
+                    
+    #                 # Ensure consistent format for stored tags
+    #                 try:
+    #                     stored_tags = json.loads(memory_meta.get("tags", "[]"))
+    #                     if isinstance(stored_tags, str):
+    #                         stored_tags = [t.strip() for t in stored_tags.split(",")]
+    #                 except json.JSONDecodeError:
+    #                     stored_tags = []
+                    
+    #                 # Normalize search tags
+    #                 search_tags = [t.strip() for t in tags]
+                    
+    #                 # Check if any of the searched tags are in the stored tags
+    #                 if any(tag in stored_tags for tag in search_tags):
+    #                     memory = Memory(
+    #                         content=doc,
+    #                         content_hash=memory_meta["content_hash"],
+    #                         tags=stored_tags,
+    #                         memory_type=memory_meta.get("type")
+    #                     )
+    #                     memories.append(memory)
+            
+    #         return memories
+            
+    #     except Exception as e:
+    #         logger.error(f"Error searching by tags: {e}")
+    #         return []
+
+    async def search_by_tag(self, tags: List[str]) -> List[Memory]:
+        try:
+            results = self.collection.get(
+                include=["metadatas", "documents"]
+            )
+
+            memories = []
+            if results["ids"]:
+                for i, doc in enumerate(results["documents"]):
+                    memory_meta = results["metadatas"][i]
+                    
+                    # Always expect JSON string in storage
+                    try:
+                        stored_tags = json.loads(memory_meta.get("tags", "[]"))
+                        stored_tags = [str(tag).strip() for tag in stored_tags]
+                    except (json.JSONDecodeError, TypeError):
+                        logger.debug(f"Invalid tags format in memory: {memory_meta.get('content_hash')}")
+                        continue
+                    
+                    # Normalize search tags
+                    search_tags = [str(tag).strip() for tag in tags if str(tag).strip()]
+                    
+                    if any(search_tag in stored_tags for search_tag in search_tags):
+                        memory = Memory(
+                            content=doc,
+                            content_hash=memory_meta["content_hash"],
+                            tags=stored_tags,
+                            memory_type=memory_meta.get("type")
+                        )
+                        memories.append(memory)
+            
+            return memories
+            
+        except Exception as e:
+            logger.error(f"Error searching by tags: {e}")
+            return []
+
     async def delete_by_tag(self, tag: str) -> Tuple[int, str]:
         """Deletes memories that match the specified tag."""
         try:
@@ -353,6 +436,25 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.exception("Error deleting memories before date:")
             return 0, str(e)
  
+    # def _format_metadata_for_chroma(self, memory: Memory) -> Dict[str, Any]:
+    #     """Format metadata to be compatible with ChromaDB requirements."""
+    #     metadata = {
+    #         "content_hash": memory.content_hash,
+    #         "memory_type": memory.memory_type if memory.memory_type else "",
+    #         "timestamp": str(memory.timestamp.timestamp())
+    #     }
+        
+    #     # Store tags as a list in metadata
+    #     if memory.tags:
+    #         metadata["tags"] = memory.tags
+        
+    #     # Add any additional metadata that's simple types
+    #     for key, value in memory.metadata.items():
+    #         if isinstance(value, (str, int, float, bool)):
+    #             metadata[key] = value
+        
+    #     return metadata
+
     def _format_metadata_for_chroma(self, memory: Memory) -> Dict[str, Any]:
         """Format metadata to be compatible with ChromaDB requirements."""
         metadata = {
@@ -361,11 +463,17 @@ class ChromaMemoryStorage(MemoryStorage):
             "timestamp": str(memory.timestamp.timestamp())
         }
         
-        # Store tags as a list in metadata
+        # Properly serialize tags
         if memory.tags:
-            metadata["tags"] = memory.tags
+            if isinstance(memory.tags, list):
+                metadata["tags"] = json.dumps([str(tag).strip() for tag in memory.tags if str(tag).strip()])
+            elif isinstance(memory.tags, str):
+                tags = [tag.strip() for tag in memory.tags.split(",") if tag.strip()]
+                metadata["tags"] = json.dumps(tags)
+        else:
+            metadata["tags"] = "[]"
         
-        # Add any additional metadata that's simple types
+        # Add any additional metadata
         for key, value in memory.metadata.items():
             if isinstance(value, (str, int, float, bool)):
                 metadata[key] = value

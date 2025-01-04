@@ -90,12 +90,189 @@ class MemoryServer:
             logger.info(f"Database validation successful: {message}")
 
     def register_handlers(self):
+        # @self.server.list_tools()
+        # async def handle_list_tools() -> List[types.Tool]:
+        #     return [
+        #         types.Tool(
+        #             name="store_memory",
+        #             description="Store new information with optional tags",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "content": {"type": "string"},
+        #                     "metadata": {
+        #                         "type": "object",
+        #                         "properties": {
+        #                             "tags": {"type": "array", "items": {"type": "string"}},
+        #                             "type": {"type": "string"}
+        #                         }
+        #                     }
+        #                 },
+        #                 "required": ["content"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="retrieve_memory",
+        #             description="Find relevant memories based on query",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "query": {"type": "string"},
+        #                     "n_results": {"type": "number", "default": 5}
+        #                 },
+        #                 "required": ["query"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="search_by_tag",
+        #             description="Search memories by tags",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "tags": {"type": "array", "items": {"type": "string"}}
+        #                 },
+        #                 "required": ["tags"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="delete_memory",
+        #             description="Delete a specific memory by its hash",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "content_hash": {"type": "string"}
+        #                 },
+        #                 "required": ["content_hash"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="delete_by_tag",
+        #             description="Delete all memories with a specific tag",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "tag": {"type": "string"}
+        #                 },
+        #                 "required": ["tag"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="cleanup_duplicates",
+        #             description="Find and remove duplicate entries",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {}
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="get_embedding",
+        #             description="Get raw embedding vector for content",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "content": {"type": "string"}
+        #                 },
+        #                 "required": ["content"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="check_embedding_model",
+        #             description="Check if embedding model is loaded and working",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {}
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="debug_retrieve",
+        #             description="Retrieve memories with debug information",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "query": {"type": "string"},
+        #                     "n_results": {"type": "number", "default": 5},
+        #                     "similarity_threshold": {"type": "number", "default": 0.0}
+        #                 },
+        #                 "required": ["query"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="exact_match_retrieve",
+        #             description="Retrieve memories using exact content match",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "content": {"type": "string"}
+        #                 },
+        #                 "required": ["content"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="check_database_health",
+        #             description="Check database health and get statistics",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {}
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="recall_by_timeframe",
+        #             description="Retrieve memories within a specific timeframe",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "start_date": {"type": "string", "format": "date"},
+        #                     "end_date": {"type": "string", "format": "date"},
+        #                     "n_results": {"type": "number", "default": 5}
+        #                 },
+        #                 "required": ["start_date"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="delete_by_timeframe",
+        #             description="Delete memories within a specific timeframe",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "start_date": {"type": "string", "format": "date"},
+        #                     "end_date": {"type": "string", "format": "date"},
+        #                     "tag": {"type": "string"}
+        #                 },
+        #                 "required": ["start_date"]
+        #             }
+        #         ),
+        #         types.Tool(
+        #             name="delete_before_date",
+        #             description="Delete memories before a specific date",
+        #             inputSchema={
+        #                 "type": "object",
+        #                 "properties": {
+        #                     "before_date": {"type": "string", "format": "date"},
+        #                     "tag": {"type": "string"}
+        #                 },
+        #                 "required": ["before_date"]
+        #             }
+        #         )
+        #     ]
         @self.server.list_tools()
         async def handle_list_tools() -> List[types.Tool]:
             return [
                 types.Tool(
                     name="store_memory",
-                    description="Store new information with optional tags",
+                    description="""Store new information with optional tags.
+
+                    Accepts two tag formats in metadata:
+                    - Array: ["tag1", "tag2"]
+                    - String: "tag1,tag2"
+
+                    Example:
+                    {
+                        "content": "Memory content",
+                        "metadata": {
+                            "tags": ["important", "reference"],
+                            "type": "note"
+                        }
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -103,7 +280,12 @@ class MemoryServer:
                             "metadata": {
                                 "type": "object",
                                 "properties": {
-                                    "tags": {"type": "array", "items": {"type": "string"}},
+                                    "tags": {
+                                        "oneOf": [
+                                            {"type": "array", "items": {"type": "string"}},
+                                            {"type": "string"}
+                                        ]
+                                    },
                                     "type": {"type": "string"}
                                 }
                             }
@@ -113,7 +295,13 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="retrieve_memory",
-                    description="Find relevant memories based on query",
+                    description="""Find relevant memories based on query.
+
+                    Example:
+                    {
+                        "query": "find this memory",
+                        "n_results": 5
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -125,7 +313,13 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="search_by_tag",
-                    description="Search memories by tags",
+                    description="""Search memories by tags. Must use array format.
+                    Returns memories matching ANY of the specified tags.
+
+                    Example:
+                    {
+                        "tags": ["important", "reference"]
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -136,18 +330,29 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="delete_memory",
-                    description="Delete a specific memory by its hash",
-                    inputSchema={
-                        "type": "object",
-                        "properties": {
-                            "content_hash": {"type": "string"}
-                        },
-                        "required": ["content_hash"]
-                    }
-                ),
+                    description="""Delete a specific memory by its hash.
+
+                    Example:
+                    {
+                        "content_hash": "a1b2c3d4..."
+                    }""",
+                                inputSchema={
+                                    "type": "object",
+                                    "properties": {
+                                        "content_hash": {"type": "string"}
+                                    },
+                                    "required": ["content_hash"]
+                                }
+                            ),
                 types.Tool(
                     name="delete_by_tag",
-                    description="Delete all memories with a specific tag",
+                    description="""Delete all memories with a specific tag.
+                    WARNING: Deletes ALL memories containing the specified tag.
+
+                    Example:
+                    {
+                        "tag": "temporary"
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -166,7 +371,12 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="get_embedding",
-                    description="Get raw embedding vector for content",
+                    description="""Get raw embedding vector for content.
+
+                    Example:
+                    {
+                        "content": "text to embed"
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -185,7 +395,14 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="debug_retrieve",
-                    description="Retrieve memories with debug information",
+                    description="""Retrieve memories with debug information.
+
+                    Example:
+                    {
+                        "query": "debug this",
+                        "n_results": 5,
+                        "similarity_threshold": 0.0
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -198,7 +415,12 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="exact_match_retrieve",
-                    description="Retrieve memories using exact content match",
+                    description="""Retrieve memories using exact content match.
+
+                    Example:
+                    {
+                        "content": "find exactly this"
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -217,7 +439,14 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="recall_by_timeframe",
-                    description="Retrieve memories within a specific timeframe",
+                    description="""Retrieve memories within a specific timeframe.
+
+                    Example:
+                    {
+                        "start_date": "2024-01-01",
+                        "end_date": "2024-01-31",
+                        "n_results": 5
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -230,7 +459,15 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="delete_by_timeframe",
-                    description="Delete memories within a specific timeframe",
+                    description="""Delete memories within a specific timeframe.
+                    Optional tag parameter to filter deletions.
+
+                    Example:
+                    {
+                        "start_date": "2024-01-01",
+                        "end_date": "2024-01-31",
+                        "tag": "temporary"
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -243,7 +480,14 @@ class MemoryServer:
                 ),
                 types.Tool(
                     name="delete_before_date",
-                    description="Delete memories before a specific date",
+                    description="""Delete memories before a specific date.
+                    Optional tag parameter to filter deletions.
+
+                    Example:
+                    {
+                        "before_date": "2024-01-01",
+                        "tag": "temporary"
+                    }""",
                     inputSchema={
                         "type": "object",
                         "properties": {
@@ -254,7 +498,7 @@ class MemoryServer:
                     }
                 )
             ]
-
+        
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: dict | None) -> List[types.TextContent]:
             try:
