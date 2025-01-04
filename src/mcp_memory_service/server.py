@@ -214,6 +214,44 @@ class MemoryServer:
                         "type": "object",
                         "properties": {}
                     }
+                ),
+                types.Tool(
+                    name="recall_by_timeframe",
+                    description="Retrieve memories within a specific timeframe",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "start_date": {"type": "string", "format": "date"},
+                            "end_date": {"type": "string", "format": "date"},
+                            "n_results": {"type": "number", "default": 5}
+                        },
+                        "required": ["start_date"]
+                    }
+                ),
+                types.Tool(
+                    name="delete_by_timeframe",
+                    description="Delete memories within a specific timeframe",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "start_date": {"type": "string", "format": "date"},
+                            "end_date": {"type": "string", "format": "date"},
+                            "tag": {"type": "string"}
+                        },
+                        "required": ["start_date"]
+                    }
+                ),
+                types.Tool(
+                    name="delete_before_date",
+                    description="Delete memories before a specific date",
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "before_date": {"type": "string", "format": "date"},
+                            "tag": {"type": "string"}
+                        },
+                        "required": ["before_date"]
+                    }
                 )
             ]
 
@@ -529,6 +567,90 @@ class MemoryServer:
             return [types.TextContent(
                 type="text",
                 text=f"Error checking database health: {str(e)}"
+            )]
+
+    async def handle_recall_by_timeframe(self, arguments: dict) -> List[types.TextContent]:
+        """Handle recall by timeframe requests."""
+        from datetime import datetime
+        
+        try:
+            start_date = datetime.fromisoformat(arguments["start_date"]).date()
+            end_date = datetime.fromisoformat(arguments.get("end_date", arguments["start_date"])).date()
+            n_results = arguments.get("n_results", 5)
+            
+            # Get timestamp range
+            start_timestamp = datetime(start_date.year, start_date.month, start_date.day).timestamp()
+            end_timestamp = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59).timestamp()
+            
+            # Retrieve memories
+            results = await self.storage.recall(n_results, start_timestamp, end_timestamp)
+            
+            if not results:
+                return [types.TextContent(type="text", text="No memories found in timeframe")]
+            
+            formatted_results = []
+            for i, result in enumerate(results):
+                memory_info = [
+                    f"Memory {i+1}:",
+                    f"Content: {result.memory.content}",
+                    f"Hash: {result.memory.content_hash}",
+                    f"Relevance Score: {result.similarity:.2f}"
+                ]
+                if result.memory.tags:
+                    memory_info.append(f"Tags: {', '.join(result.memory.tags)}")
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
+            
+            return [types.TextContent(
+                type="text",
+                text=f"Found {len(results)} memories:\n\n" + "\n".join(formatted_results)
+            )]
+            
+        except Exception as e:
+            return [types.TextContent(
+                type="text",
+                text=f"Error recalling memories: {str(e)}"
+            )]
+
+    async def handle_delete_by_timeframe(self, arguments: dict) -> List[types.TextContent]:
+        """Handle delete by timeframe requests."""
+        from datetime import datetime
+        
+        try:
+            start_date = datetime.fromisoformat(arguments["start_date"]).date()
+            end_date = datetime.fromisoformat(arguments.get("end_date", arguments["start_date"])).date()
+            tag = arguments.get("tag")
+            
+            count, message = await self.storage.delete_by_timeframe(start_date, end_date, tag)
+            return [types.TextContent(
+                type="text",
+                text=f"Deleted {count} memories: {message}"
+            )]
+            
+        except Exception as e:
+            return [types.TextContent(
+                type="text",
+                text=f"Error deleting memories: {str(e)}"
+            )]
+
+    async def handle_delete_before_date(self, arguments: dict) -> List[types.TextContent]:
+        """Handle delete before date requests."""
+        from datetime import datetime
+        
+        try:
+            before_date = datetime.fromisoformat(arguments["before_date"]).date()
+            tag = arguments.get("tag")
+            
+            count, message = await self.storage.delete_before_date(before_date, tag)
+            return [types.TextContent(
+                type="text",
+                text=f"Deleted {count} memories: {message}"
+            )]
+            
+        except Exception as e:
+            return [types.TextContent(
+                type="text",
+                text=f"Error deleting memories: {str(e)}"
             )]
 
 def parse_args():

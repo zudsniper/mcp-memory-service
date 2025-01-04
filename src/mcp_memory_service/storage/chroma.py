@@ -12,7 +12,7 @@ from chromadb.utils import embedding_functions
 from sentence_transformers import SentenceTransformer
 import logging
 from typing import List, Dict, Any, Tuple, Set, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from .base import MemoryStorage
 from ..models.memory import Memory, MemoryQueryResult
@@ -179,8 +179,7 @@ class ChromaMemoryStorage(MemoryStorage):
         except Exception as e:
             logger.error(f"Error deleting memories by tag: {e}")
             return 0, f"Error deleting memories by tag: {e}"
-
-        
+      
     async def delete(self, content_hash: str) -> Tuple[bool, str]:
         """Delete a memory by its hash."""
         try:
@@ -201,7 +200,6 @@ class ChromaMemoryStorage(MemoryStorage):
         except Exception as e:
             logger.error(f"Error deleting memory: {str(e)}")
             return False, f"Error deleting memory: {str(e)}"
-
 
     async def cleanup_duplicates(self) -> Tuple[int, str]:
         """Remove duplicate memories based on content hash."""
@@ -240,6 +238,121 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error cleaning up duplicates: {str(e)}")
             return 0, f"Error cleaning up duplicates: {str(e)}"
 
+    async def recall(self, n_results: int = 5, start_timestamp: Optional[float] = None, end_timestamp: Optional[float] = None) -> List[MemoryQueryResult]:
+        """Retrieve memories within a timestamp range."""
+        try:
+            where_clause = {}
+            if start_timestamp is not None and end_timestamp is not None:
+                where_clause = {
+                    "$and": [
+                        {"timestamp": {"$gte": start_timestamp}},
+                        {"timestamp": {"$lte": end_timestamp}}
+                    ]
+                }
+
+            results = self.collection.get(
+                where=where_clause,
+                limit=n_results,
+                include=["metadatas", "documents"]
+            )
+
+            memory_results = []
+            for i in range(len(results["ids"])):
+                metadata = results["metadatas"][i]
+                try:
+                    retrieved_tags = json.loads(metadata.get("tags", "[]"))
+                except json.JSONDecodeError:
+                    retrieved_tags = []
+
+                memory = Memory(
+                    content=results["documents"][i],
+                    content_hash=metadata["content_hash"],
+                    tags=retrieved_tags,
+                    memory_type=metadata.get("type", ""),
+                    timestamp=metadata.get("timestamp"),
+                    metadata={k: v for k, v in metadata.items() if k not in ["type", "content_hash", "tags", "timestamp"]}
+                )
+                memory_results.append(MemoryQueryResult(memory))
+
+            return memory_results
+
+        except Exception as e:
+            logger.error(f"Error retrieving memories: {str(e)}")
+            return []
+
+    async def delete_by_timeframe(self, start_date: date, end_date: Optional[date] = None, tag: Optional[str] = None) -> Tuple[int, str]:
+        """Delete memories within a timeframe and optionally filtered by tag."""
+        try:
+            if end_date is None:
+                end_date = start_date
+
+            start_datetime = datetime(start_date.year, start_date.month, start_date.day, 0, 0, 0)
+            end_datetime = datetime(end_date.year, end_date.month, end_date.day, 23, 59, 59)
+
+            start_timestamp = start_datetime.timestamp()
+            end_timestamp = end_datetime.timestamp()
+
+            where_clause = {
+                "$and": [
+                    {"timestamp": {"$gte": start_timestamp}},
+                    {"timestamp": {"$lte": end_timestamp}}
+                ]
+            }
+
+            results = self.collection.get(include=["metadatas"], where=where_clause)
+            ids_to_delete = []
+
+            if results.get("ids"):
+                for i, meta in enumerate(results["metadatas"]):
+                    try:
+                        retrieved_tags = json.loads(meta.get("tags", "[]"))
+                    except json.JSONDecodeError:
+                        retrieved_tags = []
+
+                    if tag is None or tag in retrieved_tags:
+                        ids_to_delete.append(results["ids"][i])
+
+            if not ids_to_delete:
+                return 0, "No memories found matching the criteria."
+
+            self.collection.delete(ids=ids_to_delete)
+            return len(ids_to_delete), None
+
+        except Exception as e:
+            logger.exception("Error deleting memories by timeframe:")
+            return 0, str(e)
+
+    async def delete_before_date(self, before_date: date, tag: Optional[str] = None) -> Tuple[int, str]:
+        """Delete memories before a given date and optionally filtered by tag."""
+        try:
+            before_datetime = datetime(before_date.year, before_date.month, before_date.day, 23, 59, 59)
+            before_timestamp = before_datetime.timestamp()
+
+            where_clause = {"timestamp": {"$lt": before_timestamp}}
+
+            results = self.collection.get(include=["metadatas"], where=where_clause)
+            ids_to_delete = []
+
+            if results.get("ids"):
+                for i, meta in enumerate(results["metadatas"]):
+                    try:
+                        retrieved_tags = json.loads(meta.get("tags", "[]"))
+                    except json.JSONDecodeError:
+                        retrieved_tags = []
+
+                    if tag is None or tag in retrieved_tags:
+                        ids_to_delete.append(results["ids"][i])
+
+            if not ids_to_delete:
+                return 0, "No memories found matching the criteria."
+
+            self.collection.delete(ids=ids_to_delete)
+            return len(ids_to_delete), None
+
+        except Exception as e:
+            logger.exception("Error deleting memories before date:")
+            return 0, str(e)
+ 
     def _format_metadata_for_chroma(self, memory: Memory) -> Dict[str, Any]:
         """Format metadata to be compatible with ChromaDB requirements."""
         metadata = {
