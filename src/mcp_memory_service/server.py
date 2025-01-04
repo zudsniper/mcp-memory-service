@@ -265,11 +265,21 @@ class MemoryServer:
                     - Array: ["tag1", "tag2"]
                     - String: "tag1,tag2"
 
-                    Example:
+                   Examples:
+                    # Using array format:
                     {
                         "content": "Memory content",
                         "metadata": {
                             "tags": ["important", "reference"],
+                            "type": "note"
+                        }
+                    }
+
+                    # Using string format(preferred):
+                    {
+                        "content": "Memory content",
+                        "metadata": {
+                            "tags": "important,reference",
                             "type": "note"
                         }
                     }""",
