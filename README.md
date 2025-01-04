@@ -19,62 +19,93 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 - Duplicate detection and cleanup
 - Customizable embedding model
 
-## Memory Database Operations and Methods
+## Available Tools and Operations
+
 The list covers all the core functionalities exposed through the MCP server's tools, organized by their primary purposes and use cases. Each category represents a different aspect of memory management and interaction available through the system.
 
-1. Memory Storage & Creation
-   - Core Method: `store_memory`
-     - Parameters: `content` (string, required), `metadata` (object, optional)
-     - Capabilities:
-       - Store new information with tags and metadata
-       - Automatic content hashing
-       - Timestamp recording
-       - Memory type classification
-       - Support for custom metadata
+### Core Memory Operations
 
-2. Retrieval & Search Operations
-   - Semantic Search: `retrieve_memory`
-     - Parameters: `query` (string), `n_results` (number, optional, default: 5)
-   - Tag-Based Search: `search_by_tag`
-     - Parameters: `tags` (array of strings)
-   - Exact Matching: `exact_match_retrieve`
-     - Parameters: `content` (string)
-   - Debug Retrieval: `debug_retrieve`
-     - Parameters: `query` (string), `n_results` (optional), `similarity_threshold` (optional)
-   - Time-Based Retrieval: `recall_by_timeframe`
-     - Parameters: `start_date`, `end_date`
+1. `store_memory`
+   - Store new information with optional tags
+   - Parameters:
+     - content: String (required)
+     - metadata: Object (optional)
+       - tags: Array or list of strings
+       - type: String
 
-3. Memory Management & Cleanup
-   - Content-Based Deletion: `delete_memory`
-     - Parameters: `content_hash` (string)
-   - Tag-Based Deletion: `delete_by_tag`
-     - Parameters: `tag` (string)
-   - Time-Based Deletion:
-     - `delete_by_timeframe`: Delete within time range
-     - `delete_before_date`: Delete before specific date
-   - Duplicate Management: `cleanup_duplicates`
-     - Parameters: None
+2. `retrieve_memory`
+   - Perform semantic search for relevant memories
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional, default: 5)
 
-4. System Health & Maintenance
-   - Statistics: `get_stats`
-     - Parameters: None
-     - Returns: Database size, memory count, etc.
-   - Health Monitoring:
-     - `check_database_health`: Database metrics
-     - `check_embedding_model`: Model status verification
-   - Optimization:
-     - `optimize_db`: Manual optimization trigger
-     - `create_backup`: Manual backup creation
-<img width="400" alt="grafik" src="https://github.com/user-attachments/assets/4bc854c6-721a-4abe-bcc5-7ef274628db7"/>
+3. `search_by_tag`
+   - Find memories using specific tags
+   - Parameters:
+     - tags: Array of strings (required)
 
-5. Technical Operations
-   - Vector Operations: `get_embedding`
-     - Parameters: `content` (string)
-     - Returns: Raw embedding vector
-   - Advanced Debugging: `debug_retrieve`
-     - Includes similarity scores
-     - Configurable thresholds
-     - Detailed retrieval diagnostics
+### Advanced Operations
+
+4. `exact_match_retrieve`
+   - Find memories with exact content match
+   - Parameters:
+     - content: String (required)
+
+5. `debug_retrieve`
+   - Retrieve memories with similarity scores
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional)
+     - similarity_threshold: Number (optional)
+
+### Database Management
+
+6. `create_backup`
+   - Create database backup
+   - Parameters: None
+
+7. `get_stats`
+   - Get memory statistics
+   - Returns: Database size, memory count
+
+8. `optimize_db`
+   - Optimize database performance
+   - Parameters: None
+
+9. `check_database_health`
+   - Get database health metrics
+   - Returns: Health status and statistics
+
+10. `check_embedding_model`
+    - Verify model status
+    - Parameters: None
+
+### Memory Management
+
+11. `delete_memory`
+    - Delete specific memory by hash
+    - Parameters:
+      - content_hash: String (required)
+
+12. `delete_by_tag`
+    - Delete all memories with specific tag
+    - Parameters:
+      - tag: String (required)
+
+13. `cleanup_duplicates`
+    - Remove duplicate entries
+    - Parameters: None
+
+## Performance and Maintenance
+
+- Default similarity threshold: 0.7
+- Maximum recommended memories per query: 10
+- Automatic optimization at 10,000 memories
+- Daily automatic backups with 7-day retention
+- Regular database health monitoring recommended
+- Cloud storage sync must complete before access
+- Debug mode available for troubleshooting
+
 
 ## Installation
 
@@ -142,106 +173,6 @@ MAX_RESULTS_PER_QUERY: Maximum results per query (default: 10)
 BACKUP_RETENTION_DAYS: Number of days to keep backups (default: 7)
 LOG_LEVEL: Logging level (default: INFO)
 ```
-
-## Available Tools and Operations
-
-### Core Memory Operations
-
-1. `store_memory`
-   - Store new information with optional tags
-   - Parameters:
-     - content: String (required)
-     - metadata: Object (optional)
-       - tags: Array of strings
-       - type: String
-   Example:
-   ```json
-   {
-     "content": "The capital of France is Paris",
-     "metadata": {
-       "tags": ["geography", "cities", "europe"],
-       "type": "fact"
-     }
-   }
-   ```
-Sample use case:
-<img width="1112" alt="grafik" src="https://github.com/user-attachments/assets/502477d2-ade6-4a5e-a756-b6302d9d6931" />
-
-2. `retrieve_memory`
-   - Perform semantic search for relevant memories
-   - Parameters:
-     - query: String (required)
-     - n_results: Number (optional, default: 5)
-   Example:
-   ```json
-   {
-     "query": "What is the capital of France?",
-     "n_results": 3
-   }
-   ```
-
-3. `search_by_tag`
-   - Find memories using specific tags
-   - Parameters:
-     - tags: Array of strings (required)
-   Example:
-   ```json
-   {
-     "tags": ["geography", "europe"]
-   }
-   ```
-
-### Advanced Operations
-
-4. `exact_match_retrieve`
-   - Find memories with exact content match
-   - Parameters:
-     - content: String (required)
-
-5. `debug_retrieve`
-   - Retrieve memories with similarity scores
-   - Parameters:
-     - query: String (required)
-     - n_results: Number (optional)
-     - similarity_threshold: Number (optional)
-
-### Database Management
-
-6. `create_backup`
-   - Create database backup
-   - Parameters: None
-
-7. `get_stats`
-   - Get memory statistics
-   - Returns: Database size, memory count
-
-8. `optimize_db`
-   - Optimize database performance
-   - Parameters: None
-
-9. `check_database_health`
-   - Get database health metrics
-   - Returns: Health status and statistics
-
-10. `check_embedding_model`
-    - Verify model status
-    - Parameters: None
-
-### Memory Management
-
-11. `delete_memory`
-    - Delete specific memory by hash
-    - Parameters:
-      - content_hash: String (required)
-
-12. `delete_by_tag`
-    - Delete all memories with specific tag
-    - Parameters:
-      - tag: String (required)
-
-13. `cleanup_duplicates`
-    - Remove duplicate entries
-    - Parameters: None
 
 ## Sample Use Cases
 Semantic requests:
@@ -312,7 +243,7 @@ Each test file includes:
 └──server.py     # Main MCP server
 ```
 
-##  Additional Stuff
+##  Additional Stuff for Development
 ```
 ../your_mcp_memory_service_directory
 ├── scripts/
