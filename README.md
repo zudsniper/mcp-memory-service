@@ -19,28 +19,93 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 - Duplicate detection and cleanup
 - Customizable embedding model
 
-## Key operations you can perform with your memory database:
+## Available Tools and Operations
 
-1. Store New Memories
-   - You can store new information with optional tags and metadata
-   - Good for saving important information you want to retrieve later
+The list covers all the core functionalities exposed through the MCP server's tools, organized by their primary purposes and use cases. Each category represents a different aspect of memory management and interaction available through the system.
 
-2. Retrieve & Search
-   - Search by semantic similarity using a query
-   - Search by specific tags
-   - Perform exact content matches
-   - Debug-level retrieval with similarity thresholds
+### Core Memory Operations
 
-3. Memory Management
-   - Delete specific memories using their content hash
-   - Delete all memories with a specific tag
-   - Clean up duplicate entries
+1. `store_memory`
+   - Store new information with optional tags
+   - Parameters:
+     - content: String (required)
+     - metadata: Object (optional)
+       - tags: Array or list of strings
+       - type: String
 
-4. Technical Operations
-   - Get raw embedding vectors for content
-   - Check if the embedding model is working
-   - Monitor database health
-<img width="750" alt="grafik" src="https://github.com/user-attachments/assets/4bc854c6-721a-4abe-bcc5-7ef274628db7" />
+2. `retrieve_memory`
+   - Perform semantic search for relevant memories
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional, default: 5)
+
+3. `search_by_tag`
+   - Find memories using specific tags
+   - Parameters:
+     - tags: Array of strings (required)
+
+### Advanced Operations
+
+4. `exact_match_retrieve`
+   - Find memories with exact content match
+   - Parameters:
+     - content: String (required)
+
+5. `debug_retrieve`
+   - Retrieve memories with similarity scores
+   - Parameters:
+     - query: String (required)
+     - n_results: Number (optional)
+     - similarity_threshold: Number (optional)
+
+### Database Management
+
+6. `create_backup`
+   - Create database backup
+   - Parameters: None
+
+7. `get_stats`
+   - Get memory statistics
+   - Returns: Database size, memory count
+
+8. `optimize_db`
+   - Optimize database performance
+   - Parameters: None
+
+9. `check_database_health`
+   - Get database health metrics
+   - Returns: Health status and statistics
+
+10. `check_embedding_model`
+    - Verify model status
+    - Parameters: None
+
+### Memory Management
+
+11. `delete_memory`
+    - Delete specific memory by hash
+    - Parameters:
+      - content_hash: String (required)
+
+12. `delete_by_tag`
+    - Delete all memories with specific tag
+    - Parameters:
+      - tag: String (required)
+
+13. `cleanup_duplicates`
+    - Remove duplicate entries
+    - Parameters: None
+
+## Performance and Maintenance
+
+- Default similarity threshold: 0.7
+- Maximum recommended memories per query: 10
+- Automatic optimization at 10,000 memories
+- Daily automatic backups with 7-day retention
+- Regular database health monitoring recommended
+- Cloud storage sync must complete before access
+- Debug mode available for troubleshooting
+
 
 ## Installation
 
@@ -88,110 +153,45 @@ Add the following to your `claude_desktop_config.json` file:
     }
   }
 }
-``` 
-If "env" is missing, the default values will be used. The path to your ChromaDB directory will be provided in the mcp server logs.
+```
 
-## Available Tools
+### Storage Structure and Settings
+```
+../your_mcp_memory_service_directory/mcp-memory/
+├── chroma_db/    # Main vector database
+└── backups/      # Automatic backups
+```
 
-### Core Memory Operations
+Configure through environment variables:
+```
+CHROMA_DB_PATH: Path to ChromaDB storage
+BACKUP_PATH: Path for backups
+AUTO_BACKUP_INTERVAL: Backup interval in hours (default: 24)
+MAX_MEMORIES_BEFORE_OPTIMIZE: Threshold for auto-optimization (default: 10000)
+SIMILARITY_THRESHOLD: Default similarity threshold (default: 0.7)
+MAX_RESULTS_PER_QUERY: Maximum results per query (default: 10)
+BACKUP_RETENTION_DAYS: Number of days to keep backups (default: 7)
+LOG_LEVEL: Logging level (default: INFO)
+```
 
-1. `store_memory`
-   - Store new information with optional tags
-   - Parameters:
-     - content: String (required)
-     - metadata: Object (optional)
-       - tags: Array of strings
-       - type: String
-   Example:
-   ```json
-   {
-     "content": "The capital of France is Paris",
-     "metadata": {
-       "tags": ["geography", "cities", "europe"],
-       "type": "fact"
-     }
-   }
-   ```
-Sample use case:
+## Sample Use Cases
+Semantic requests:
+
+<img width="750" alt="grafik" src="https://github.com/user-attachments/assets/4bc854c6-721a-4abe-bcc5-7ef274628db7" />
 <img width="1112" alt="grafik" src="https://github.com/user-attachments/assets/502477d2-ade6-4a5e-a756-b6302d9d6931" />
-
-2. `retrieve_memory`
-   - Perform semantic search for relevant memories
-   - Parameters:
-     - query: String (required)
-     - n_results: Number (optional, default: 5)
-   Example:
-   ```json
-   {
-     "query": "What is the capital of France?",
-     "n_results": 3
-   }
-   ```
-
-3. `search_by_tag`
-   - Find memories using specific tags
-   - Parameters:
-     - tags: Array of strings (required)
-   Example:
-   ```json
-   {
-     "tags": ["geography", "europe"]
-   }
-   ```
-
-### Advanced Operations
-
-4. `exact_match_retrieve`
-   - Find memories with exact content match
-   - Parameters:
-     - content: String (required)
-
-5. `debug_retrieve`
-   - Retrieve memories with similarity scores
-   - Parameters:
-     - query: String (required)
-     - n_results: Number (optional)
-     - similarity_threshold: Number (optional)
-
-### Database Management
-
-6. `create_backup`
-   - Create database backup
-   - Parameters: None
-
-7. `get_stats`
-   - Get memory statistics
-   - Returns: Database size, memory count, etc.
-
-8. `optimize_db`
-   - Optimize database performance
-   - Parameters: None
-
-9. `cleanup_duplicates`
-   - Remove duplicate entries
-   - Parameters: None
-
-10. `check_database_health`
-    - Get database health metrics
-    - Returns: Health status and statistics
 
 Call by tool name:
 <img width="1112" alt="grafik" src="https://github.com/user-attachments/assets/23d161a8-f62c-41c6-bcd8-e9b16f369c95" />
-    
-11. `check_embedding_model`
-    - load and operational status
 
-### Memory Management
+## Performance and Maintenance
 
-11. `delete_memory`
-    - Delete specific memory by hash
-    - Parameters:
-      - content_hash: String (required)
-
-12. `delete_by_tag`
-    - Delete all memories with specific tag
-    - Parameters:
-      - tag: String (required)
+- Default similarity threshold: 0.7
+- Maximum recommended memories per query: 10
+- Automatic optimization at 10,000 memories
+- Daily automatic backups with 7-day retention
+- Regular database health monitoring recommended
+- Cloud storage sync must complete before access
+- Debug mode available for troubleshooting
 
 ## Testing
 
@@ -221,12 +221,6 @@ Each test file includes:
 - Comprehensive test cases for the related functionality
 - Error case handling and validation
 
-## Storage Structure
-```
-../your_mcp_memory_service_directory/mcp-memory/ # or alternate path depending on config
-├── chroma_db/    # Main vector database
-└── backups/      # Automatic backups
-```
 
 ## Project Structure
 ```
@@ -242,8 +236,20 @@ Each test file includes:
 │   └── chroma.py      # ChromaDB implementation
 ├── utils/
 │   ├── __init__.py
+│   ├── db_utils.py    # Database utility functions
+│   ├── debug.py       # Debugging utilities
 │   └── hashing.py     # Hashing utilities
-├── server.py          # Main MCP server
+├── config.py     # Configuration utilities
+└──server.py     # Main MCP server
+```
+
+##  Additional Stuff for Development
+```
+../your_mcp_memory_service_directory
+├── scripts/
+│   ├── migrate_tags.py    # Tag migration script
+│   ├── repair_memories.py # Memory repair script
+│   └── validate_memories.py # Memory validation script
 └── tests/
     ├── __init__.py
     ├── test_memory_ops.py
@@ -277,41 +283,12 @@ pytest-asyncio>=0.21.0
 
 ## Troubleshooting
 - Check logs in `..\Claude\logs\mcp-server-memory.log`
-- Use debug_retrieve for investigating semantic search issues
-- Monitor ChromaDB health with check_database_health
-- Use exact_match_retrieve when semantic search gives unexpected results
+- Use `debug_retrieve` for search issues
+- Monitor database health with `check_database_health`
+- Use `exact_match_retrieve` for precise matching
 
-## Settings Configuration
-The service can be configured through environment variables or a config file:
-
-```
-CHROMA_DB_PATH: Path to ChromaDB storage
-BACKUP_PATH: Path for backups
-AUTO_BACKUP_INTERVAL: Backup interval in hours (default: 24)
-MAX_MEMORIES_BEFORE_OPTIMIZE: Threshold for auto-optimization (default: 10000)
-SIMILARITY_THRESHOLD: Default similarity threshold (default: 0.7)
-MAX_RESULTS_PER_QUERY: Maximum results per query (default: 10)
-BACKUP_RETENTION_DAYS: Number of days to keep backups (default: 7)
-LOG_LEVEL: Logging level (default: INFO)
-```
-
-## Development and Contributing
-
-### Setup Development Environment
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate # On Windows: venv\Scripts\activate
-
-# Install dev dependencies
-pip install -r requirements-dev.txt
-
-# Run tests (need to be fixed)
-pytest tests/
-```
-
-### Code Style
-- Follow PEP 8 guidelines
+## Development Guidelines
+- Follow PEP 8
 - Use type hints
 - Include docstrings for all functions and classes
 - Add tests for new features
@@ -329,3 +306,10 @@ MIT License - See LICENSE file for details
 - ChromaDB team for the vector database
 - Sentence Transformers project for embedding models
 - MCP project for the protocol specification
+
+## Contact
+
+[telegram](t.me/doobeedoo)
+
+# Statement of Gratitude
+*A special thanks to God, my ultimate source of strength and guidance, and to my wife for her unwavering patience and support throughout this project. I'd also like to express my gratitude to Claude from Antrophic for his invaluable contributions and expertise. This project wouldn't have been possible without your collective support.*
