@@ -1,6 +1,7 @@
 # MCP Memory Service
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![smithery badge](https://smithery.ai/badge/@doobidoo/mcp-memory-service)](https://smithery.ai/server/@doobidoo/mcp-memory-service)
 
 An MCP server providing semantic memory and persistent storage capabilities for Claude Desktop using ChromaDB and sentence transformers. This service enables long-term memory storage with semantic search capabilities, making it ideal for maintaining context across conversations and instances. For personal use only. No user management is provided.
 
@@ -109,6 +110,15 @@ The list covers all the core functionalities exposed through the MCP server's to
 
 ## Installation
 
+### Installing via Smithery
+
+To install Memory Service for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@doobidoo/mcp-memory-service):
+
+```bash
+npx -y @smithery/cli install @doobidoo/mcp-memory-service --client claude
+```
+
+### Manual Installation
 1. Create Python virtual environment:
 ```bash
 python -m venv venv
