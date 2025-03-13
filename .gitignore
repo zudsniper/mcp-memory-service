@@ -37,6 +37,8 @@ chroma_db/
 # Project specific
 backups/
 test_output.txt
+claude_desktop_config_updated.json
+claude_config/claude_desktop_config.json
 
 # macOS
 .DS_Store

@@ -10,22 +10,29 @@ import traceback
 import argparse
 import sys
 import json
-from typing import List
+import platform
+from typing import List, Dict, Any
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
+from mcp.types import Resource
 
 from .config import (
-    CHROMA_PATH, 
-    BACKUPS_PATH, 
-    SERVER_NAME, 
+    CHROMA_PATH,
+    BACKUPS_PATH,
+    SERVER_NAME,
     SERVER_VERSION
 )
 from .storage.chroma import ChromaMemoryStorage
 from .models.memory import Memory
 from .utils.hashing import generate_content_hash
+from .utils.system_detection import (
+    get_system_info,
+    print_system_diagnostics,
+    AcceleratorType
+)
 
 # Configure logging
 logging.basicConfig(
@@ -34,13 +41,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Set environment variable for PyTorch MPS
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+# Configure environment variables based on detected system
+def configure_environment():
+    """Configure environment variables based on detected system."""
+    system_info = get_system_info()
+    
+    # Log system information
+    logger.info(f"Detected system: {system_info.os_name} {system_info.architecture}")
+    logger.info(f"Memory: {system_info.memory_gb:.2f} GB")
+    logger.info(f"Accelerator: {system_info.accelerator}")
+    
+    # Set environment variables for better cross-platform compatibility
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    
+    # For Apple Silicon, ensure we use MPS when available
+    if system_info.architecture == "arm64" and system_info.os_name == "darwin":
+        logger.info("Configuring for Apple Silicon")
+        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+    
+    # For Windows with limited GPU memory, use smaller chunks
+    if system_info.os_name == "windows" and system_info.accelerator == AcceleratorType.CUDA:
+        logger.info("Configuring for Windows with CUDA")
+        os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+    
+    # For Linux with ROCm, ensure we use the right backend
+    if system_info.os_name == "linux" and system_info.accelerator == AcceleratorType.ROCm:
+        logger.info("Configuring for Linux with ROCm")
+        os.environ["HSA_OVERRIDE_GFX_VERSION"] = "10.3.0"
+    
+    # For systems with limited memory, reduce cache sizes
+    if system_info.memory_gb < 8:
+        logger.info("Configuring for low-memory system")
+        os.environ["TRANSFORMERS_CACHE"] = os.path.join(os.path.dirname(CHROMA_PATH), "model_cache")
+        os.environ["HF_HOME"] = os.path.join(os.path.dirname(CHROMA_PATH), "hf_cache")
+        os.environ["SENTENCE_TRANSFORMERS_HOME"] = os.path.join(os.path.dirname(CHROMA_PATH), "st_cache")
+
+# Configure environment before any imports that might use it
+configure_environment()
 
 class MemoryServer:
     def __init__(self):
-        """Initialize the server."""
+        """Initialize the server with hardware-aware configuration."""
         self.server = Server(SERVER_NAME)
+        self.system_info = get_system_info()
         
         try:
             # Initialize paths
@@ -48,48 +91,130 @@ class MemoryServer:
             os.makedirs(CHROMA_PATH, exist_ok=True)
             os.makedirs(BACKUPS_PATH, exist_ok=True)
             
-            # Initialize storage - this part is synchronous
+            # Log system diagnostics
+            logger.info(f"Initializing on {platform.system()} {platform.machine()} with Python {platform.python_version()}")
+            logger.info(f"Using accelerator: {self.system_info.accelerator}")
+            
+            # Initialize storage with hardware-aware settings
+            logger.info("Initializing ChromaMemoryStorage with hardware-aware settings...")
             self.storage = ChromaMemoryStorage(CHROMA_PATH)
 
         except Exception as e:
             logger.error(f"Initialization error: {str(e)}")
-            raise
+            logger.error(traceback.format_exc())
+            
+            # Try to create a minimal storage instance that can at least start
+            try:
+                logger.warning("Attempting to create minimal storage instance...")
+                self.storage = ChromaMemoryStorage(CHROMA_PATH)
+            except Exception as fallback_error:
+                logger.error(f"Failed to create minimal storage: {str(fallback_error)}")
+                raise
         
         # Register handlers
         self.register_handlers()
         logger.info("Server initialization complete")
 
     async def initialize(self):
-        """Async initialization method."""
+        """Async initialization method with improved error handling."""
         try:
             # Run any async initialization tasks here
-            await self.validate_database_health()
+            logger.info("Starting async initialization...")
+            
+            # Print system diagnostics to stderr for visibility
+            print("\n=== System Diagnostics ===", file=sys.stderr)
+            print(f"OS: {self.system_info.os_name} {self.system_info.os_version}", file=sys.stderr)
+            print(f"Architecture: {self.system_info.architecture}", file=sys.stderr)
+            print(f"Memory: {self.system_info.memory_gb:.2f} GB", file=sys.stderr)
+            print(f"Accelerator: {self.system_info.accelerator}", file=sys.stderr)
+            print(f"Python: {platform.python_version()}", file=sys.stderr)
+            
+            # Validate database health with timeout
+            try:
+                success = await asyncio.wait_for(
+                    self.validate_database_health(),
+                    timeout=10.0
+                )
+                if not success:
+                    logger.warning("Database health check failed, but server will continue")
+            except asyncio.TimeoutError:
+                logger.warning("Database health check timed out, continuing anyway")
+            
+            # Add explicit console error output for Smithery to see
+            print("MCP Memory Service initialization completed", file=sys.stderr)
+            
             return True
         except Exception as e:
             logger.error(f"Async initialization error: {str(e)}")
-            raise
+            logger.error(traceback.format_exc())
+            # Add explicit console error output for Smithery to see
+            print(f"Initialization error: {str(e)}", file=sys.stderr)
+            # Don't raise the exception, just return False
+            return False
 
     async def validate_database_health(self):
         """Validate database health during initialization."""
         from .utils.db_utils import validate_database, repair_database
         
-        # Check database health
-        is_valid, message = await validate_database(self.storage)
-        if not is_valid:
-            logger.warning(f"Database validation failed: {message}")
-            
-            # Attempt repair
-            logger.info("Attempting database repair...")
-            repair_success, repair_message = await repair_database(self.storage)
-            
-            if not repair_success:
-                raise RuntimeError(f"Database repair failed: {repair_message}")
+        try:
+            # Check database health
+            is_valid, message = await validate_database(self.storage)
+            if not is_valid:
+                logger.warning(f"Database validation failed: {message}")
+                
+                # Attempt repair
+                logger.info("Attempting database repair...")
+                repair_success, repair_message = await repair_database(self.storage)
+                
+                if not repair_success:
+                    logger.error(f"Database repair failed: {repair_message}")
+                    return False
+                else:
+                    logger.info(f"Database repair successful: {repair_message}")
+                    return True
             else:
-                logger.info(f"Database repair successful: {repair_message}")
-        else:
-            logger.info(f"Database validation successful: {message}")
+                logger.info(f"Database validation successful: {message}")
+                return True
+        except Exception as e:
+            logger.error(f"Database validation error: {str(e)}")
+            return False
 
+    def handle_method_not_found(self, method: str) -> None:
+        """Custom handler for unsupported methods.
+        
+        This logs the unsupported method request but doesn't raise an exception,
+        allowing the MCP server to handle it with a standard JSON-RPC error response.
+        """
+        logger.warning(f"Unsupported method requested: {method}")
+        # The MCP server will automatically respond with a Method not found error
+        # We don't need to do anything else here
+    
     def register_handlers(self):
+        # Implement resources/list method to handle client requests
+        # Even though this service doesn't provide resources, we need to return an empty list
+        # rather than a "Method not found" error
+        @self.server.list_resources()
+        async def handle_list_resources() -> List[Resource]:
+            # Return an empty list of resources
+            return []
+        
+        @self.server.read_resource()
+        async def handle_read_resource(uri: str) -> List[types.TextContent]:
+            # Since we don't provide any resources, return an error message
+            logger.warning(f"Resource read request received for URI: {uri}, but no resources are available")
+            return [types.TextContent(
+                type="text",
+                text=f"Error: Resource not found: {uri}"
+            )]
+        
+        @self.server.list_resource_templates()
+        async def handle_list_resource_templates() -> List[types.ResourceTemplate]:
+            # Return an empty list of resource templates
+            return []
+        
+        # Add a custom error handler for unsupported methods
+        self.server.on_method_not_found = self.handle_method_not_found
+        
         @self.server.list_tools()
         async def handle_list_tools() -> List[types.Tool]:
             return [
@@ -770,14 +895,54 @@ async def async_main():
     global CHROMA_PATH
     CHROMA_PATH = args.chroma_path
     
+    # Print system diagnostics to console
+    system_info = get_system_info()
+    print("\n=== MCP Memory Service System Diagnostics ===", file=sys.stderr)
+    print(f"OS: {system_info.os_name} {system_info.architecture}", file=sys.stderr)
+    print(f"Python: {platform.python_version()}", file=sys.stderr)
+    print(f"Hardware Acceleration: {system_info.accelerator}", file=sys.stderr)
+    print(f"Memory: {system_info.memory_gb:.2f} GB", file=sys.stderr)
+    print(f"Optimal Model: {system_info.get_optimal_model()}", file=sys.stderr)
+    print(f"Optimal Batch Size: {system_info.get_optimal_batch_size()}", file=sys.stderr)
+    print(f"ChromaDB Path: {CHROMA_PATH}", file=sys.stderr)
+    print("================================================\n", file=sys.stderr)
+    
     logger.info(f"Starting MCP Memory Service with ChromaDB path: {CHROMA_PATH}")
     
     try:
-        # Create server instance
+        # Create server instance with hardware-aware configuration
         memory_server = MemoryServer()
         
-        # Run async initialization
-        await memory_server.initialize()
+        # Set up async initialization with timeout and retry logic
+        max_retries = 2
+        retry_count = 0
+        init_success = False
+        
+        while retry_count <= max_retries and not init_success:
+            if retry_count > 0:
+                logger.warning(f"Retrying initialization (attempt {retry_count}/{max_retries})...")
+                
+            init_task = asyncio.create_task(memory_server.initialize())
+            try:
+                # 30 second timeout for initialization
+                init_success = await asyncio.wait_for(init_task, timeout=30.0)
+                if init_success:
+                    logger.info("Async initialization completed successfully")
+                else:
+                    logger.warning("Initialization returned failure status")
+                    retry_count += 1
+            except asyncio.TimeoutError:
+                logger.warning("Async initialization timed out. Continuing with server startup.")
+                # Don't cancel the task, let it complete in the background
+                break
+            except Exception as init_error:
+                logger.error(f"Initialization error: {str(init_error)}")
+                logger.error(traceback.format_exc())
+                retry_count += 1
+                
+                if retry_count <= max_retries:
+                    logger.info(f"Waiting 2 seconds before retry...")
+                    await asyncio.sleep(2)
         
         # Start the server
         async with mcp.server.stdio.stdio_server() as (read_stream, write_stream):
@@ -788,14 +953,26 @@ async def async_main():
                 InitializationOptions(
                     server_name=SERVER_NAME,
                     server_version=SERVER_VERSION,
+                    # Explicitly specify the protocol version that matches Claude's request
+                    # Use the latest protocol version to ensure compatibility with all clients
+                    protocol_version="2024-11-05",
                     capabilities=memory_server.server.get_capabilities(
                         notification_options=NotificationOptions(),
-                        experimental_capabilities={},
+                        experimental_capabilities={
+                            "hardware_info": {
+                                "architecture": system_info.architecture,
+                                "accelerator": system_info.accelerator,
+                                "memory_gb": system_info.memory_gb,
+                                "cpu_count": system_info.cpu_count
+                            }
+                        },
                     ),
                 ),
             )
     except Exception as e:
-        logger.error(f"Server error: {str(e)}\n{traceback.format_exc()}")
+        logger.error(f"Server error: {str(e)}")
+        logger.error(traceback.format_exc())
+        print(f"Fatal server error: {str(e)}", file=sys.stderr)
         raise
 
 def main():
