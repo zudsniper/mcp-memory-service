@@ -11,7 +11,8 @@ import argparse
 import sys
 import json
 import platform
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime, timedelta
 
 from mcp.server.models import InitializationOptions
 import mcp.types as types
@@ -33,6 +34,7 @@ from .utils.system_detection import (
     print_system_diagnostics,
     AcceleratorType
 )
+from .utils.time_parser import extract_time_expression, parse_time_expression
 
 # Configure logging
 logging.basicConfig(
@@ -272,6 +274,35 @@ class MemoryServer:
                     }
                 ),
                 types.Tool(
+                    name="recall_memory",
+                    description="""Retrieve memories using natural language time expressions and optional semantic search.
+                    
+                    Supports various time-related expressions such as:
+                    - "yesterday", "last week", "2 days ago"
+                    - "last summer", "this month", "last January"
+                    - "spring", "winter", "Christmas", "Thanksgiving"
+                    - "morning", "evening", "yesterday afternoon"
+                    
+                    Examples:
+                    {
+                        "query": "recall what I stored last week"
+                    }
+                    
+                    {
+                        "query": "find information about databases from two months ago",
+                        "n_results": 5
+                    }
+                    """,
+                    inputSchema={
+                        "type": "object",
+                        "properties": {
+                            "query": {"type": "string"},
+                            "n_results": {"type": "number", "default": 5}
+                        },
+                        "required": ["query"]
+                    }
+                ),
+                types.Tool(
                     name="retrieve_memory",
                     description="""Find relevant memories based on query.
 
@@ -488,6 +519,8 @@ class MemoryServer:
                     return await self.handle_store_memory(arguments)
                 elif name == "retrieve_memory":
                     return await self.handle_retrieve_memory(arguments)
+                elif name == "recall_memory":
+                    return await self.handle_recall_memory(arguments)
                 elif name == "search_by_tag":
                     return await self.handle_search_by_tag(arguments)
                 elif name == "delete_memory":
@@ -760,6 +793,100 @@ class MemoryServer:
             )]
         except Exception as e:
             return [types.TextContent(type="text", text=f"Error in exact match retrieve: {str(e)}")]
+
+    async def handle_recall_memory(self, arguments: dict) -> List[types.TextContent]:
+        """
+        Handle memory recall requests with natural language time expressions.
+        
+        This handler parses natural language time expressions from the query,
+        extracts time ranges, and combines them with optional semantic search.
+        """
+        query = arguments.get("query", "")
+        n_results = arguments.get("n_results", 5)
+        
+        if not query:
+            return [types.TextContent(type="text", text="Error: Query is required")]
+        
+        try:
+            # Parse natural language time expressions
+            cleaned_query, (start_timestamp, end_timestamp) = extract_time_expression(query)
+            
+            # Log the parsed timestamps and clean query
+            logger.info(f"Original query: {query}")
+            logger.info(f"Cleaned query for semantic search: {cleaned_query}")
+            logger.info(f"Parsed time range: {start_timestamp} to {end_timestamp}")
+            
+            if start_timestamp is None and end_timestamp is None:
+                # No time expression found, try direct parsing
+                logger.info("No time expression found in query, trying direct parsing")
+                start_timestamp, end_timestamp = parse_time_expression(query)
+                logger.info(f"Direct parse result: {start_timestamp} to {end_timestamp}")
+            
+            # Format human-readable time range for response
+            time_range_str = ""
+            if start_timestamp is not None and end_timestamp is not None:
+                start_dt = datetime.fromtimestamp(start_timestamp)
+                end_dt = datetime.fromtimestamp(end_timestamp)
+                time_range_str = f" from {start_dt.strftime('%Y-%m-%d %H:%M')} to {end_dt.strftime('%Y-%m-%d %H:%M')}"
+            
+            # Retrieve memories with timestamp filter and optional semantic search
+            # If cleaned_query is empty or just whitespace after removing time expressions,
+            # we should perform time-based retrieval only
+            semantic_query = cleaned_query.strip() if cleaned_query.strip() else None
+            
+            # Use the enhanced recall method from ChromaMemoryStorage that combines
+            # semantic search with time filtering, or just time filtering if no semantic query
+            results = await self.storage.recall(
+                query=semantic_query,
+                n_results=n_results,
+                start_timestamp=start_timestamp,
+                end_timestamp=end_timestamp
+            )
+            
+            if not results:
+                no_results_msg = f"No memories found{time_range_str}"
+                return [types.TextContent(type="text", text=no_results_msg)]
+            
+            # Format results
+            formatted_results = []
+            for i, result in enumerate(results):
+                memory_dt = datetime.fromtimestamp(float(result.memory.timestamp)) if result.memory.timestamp else None
+                
+                memory_info = [
+                    f"Memory {i+1}:",
+                ]
+                
+                # Add timestamp if available
+                if memory_dt:
+                    memory_info.append(f"Timestamp: {memory_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # Add other memory information
+                memory_info.extend([
+                    f"Content: {result.memory.content}",
+                    f"Hash: {result.memory.content_hash}"
+                ])
+                
+                # Add relevance score if available (may not be for time-only queries)
+                if hasattr(result, 'relevance_score') and result.relevance_score is not None:
+                    memory_info.append(f"Relevance Score: {result.relevance_score:.2f}")
+                
+                # Add tags if available
+                if result.memory.tags:
+                    memory_info.append(f"Tags: {', '.join(result.memory.tags)}")
+                
+                memory_info.append("---")
+                formatted_results.append("\n".join(memory_info))
+            
+            # Include time range in response if available
+            found_msg = f"Found {len(results)} memories{time_range_str}:"
+            return [types.TextContent(
+                type="text",
+                text=f"{found_msg}\n\n" + "\n".join(formatted_results)
+            )]
+            
+        except Exception as e:
+            logger.error(f"Error in recall_memory: {str(e)}\n{traceback.format_exc()}")
+            return [types.TextContent(type="text", text=f"Error recalling memories: {str(e)}")]
 
     async def handle_check_database_health(self, arguments: dict) -> List[types.TextContent]:
         """Handle database health check requests."""

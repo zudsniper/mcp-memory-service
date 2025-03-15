@@ -363,24 +363,97 @@ class ChromaMemoryStorage(MemoryStorage):
             logger.error(f"Error cleaning up duplicates: {str(e)}")
             return 0, f"Error cleaning up duplicates: {str(e)}"
 
-    async def recall(self, n_results: int = 5, start_timestamp: Optional[float] = None, end_timestamp: Optional[float] = None) -> List[MemoryQueryResult]:
-        """Retrieve memories within a timestamp range."""
+    async def recall(self, query: Optional[str] = None, n_results: int = 5, start_timestamp: Optional[float] = None, end_timestamp: Optional[float] = None) -> List[MemoryQueryResult]:
+        """
+        Retrieve memories with combined time filtering and optional semantic search.
+        
+        Args:
+            query: Optional semantic search query. If None, only time filtering is applied.
+            n_results: Maximum number of results to return.
+            start_timestamp: Optional start time for filtering.
+            end_timestamp: Optional end time for filtering.
+            
+        Returns:
+            List of MemoryQueryResult objects.
+        """
         try:
+            # Check if collection is initialized
+            if self.collection is None:
+                logger.error("Collection not initialized, cannot retrieve memories")
+                return []
+                
+            # Build time filtering where clause
             where_clause = {}
-            if start_timestamp is not None and end_timestamp is not None:
-                where_clause = {
-                    "$and": [
-                        {"timestamp": {"$gte": start_timestamp}},
-                        {"timestamp": {"$lte": end_timestamp}}
-                    ]
-                }
+            if start_timestamp is not None or end_timestamp is not None:
+                where_clause = {"$and": []}
+                
+                if start_timestamp is not None:
+                    where_clause["$and"].append({"timestamp": {"$gte": float(start_timestamp)}})
+                
+                if end_timestamp is not None:
+                    where_clause["$and"].append({"timestamp": {"$lte": float(end_timestamp)}})
 
+            # If there's no valid where clause, set it to None to avoid ChromaDB errors
+            if not where_clause.get("$and", []):
+                where_clause = None
+                
+            # Determine whether to use semantic search or just time-based filtering
+            if query:
+                # Combined semantic search with time filtering
+                try:
+                    results = self.collection.query(
+                        query_texts=[query],
+                        n_results=n_results,
+                        where=where_clause,
+                        include=["documents", "metadatas", "distances"]
+                    )
+                    
+                    if not results["ids"] or not results["ids"][0]:
+                        return []
+                    
+                    memory_results = []
+                    for i in range(len(results["ids"][0])):
+                        metadata = results["metadatas"][0][i]
+                        
+                        # Parse tags from JSON string
+                        try:
+                            tags = json.loads(metadata.get("tags", "[]"))
+                        except json.JSONDecodeError:
+                            tags = []
+                        
+                        # Reconstruct memory object
+                        timestamp = float(metadata.get("timestamp", time.time()))
+                        memory = Memory(
+                            content=results["documents"][0][i],
+                            content_hash=metadata["content_hash"],
+                            tags=tags,
+                            memory_type=metadata.get("memory_type", ""),
+                            timestamp=timestamp,
+                            metadata={k: v for k, v in metadata.items() 
+                                    if k not in ["content_hash", "tags", "memory_type", "timestamp"]}
+                        )
+                        
+                        # Calculate cosine similarity from distance
+                        similarity = 1.0 - results["distances"][0][i]
+                        
+                        memory_results.append(MemoryQueryResult(memory=memory, relevance_score=similarity))
+                    
+                    return memory_results
+                except Exception as query_error:
+                    logger.error(f"Error in semantic search: {str(query_error)}")
+                    # Fall back to time-based retrieval on error
+                    logger.info("Falling back to time-based retrieval")
+            
+            # Time-based filtering only (or fallback from failed semantic search)
             results = self.collection.get(
                 where=where_clause,
                 limit=n_results,
                 include=["metadatas", "documents"]
             )
 
+            if not results["ids"]:
+                return []
+                
             memory_results = []
             for i in range(len(results["ids"])):
                 metadata = results["metadatas"][i]
@@ -388,21 +461,30 @@ class ChromaMemoryStorage(MemoryStorage):
                     retrieved_tags = json.loads(metadata.get("tags", "[]"))
                 except json.JSONDecodeError:
                     retrieved_tags = []
+                
+                # Ensure timestamp is a float
+                try:
+                    timestamp = float(metadata.get("timestamp", time.time()))
+                except (ValueError, TypeError):
+                    timestamp = time.time()
 
                 memory = Memory(
                     content=results["documents"][i],
                     content_hash=metadata["content_hash"],
                     tags=retrieved_tags,
                     memory_type=metadata.get("type", ""),
-                    timestamp=metadata.get("timestamp"),
-                    metadata={k: v for k, v in metadata.items() if k not in ["type", "content_hash", "tags", "timestamp"]}
+                    timestamp=timestamp,
+                    metadata={k: v for k, v in metadata.items() 
+                             if k not in ["type", "content_hash", "tags", "timestamp"]}
                 )
-                memory_results.append(MemoryQueryResult(memory))
+                # For time-based retrieval, we don't have a relevance score
+                memory_results.append(MemoryQueryResult(memory=memory, relevance_score=None))
 
             return memory_results
 
         except Exception as e:
-            logger.error(f"Error retrieving memories: {str(e)}")
+            logger.error(f"Error in recall: {str(e)}")
+            logger.error(traceback.format_exc())
             return []
 
     async def delete_by_timeframe(self, start_date: date, end_date: Optional[date] = None, tag: Optional[str] = None) -> Tuple[int, str]:

@@ -11,6 +11,7 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 ## Features
 
 - Semantic search using sentence transformers
+- **Natural language time-based recall** (e.g., "last week", "yesterday morning")
 - Tag-based memory retrieval system
 - Persistent storage using ChromaDB
 - Automatic database backups
@@ -144,23 +145,24 @@ The memory service provides the following operations through the MCP server:
 
 1. `store_memory` - Store new information with optional tags
 2. `retrieve_memory` - Perform semantic search for relevant memories
-3. `search_by_tag` - Find memories using specific tags
-4. `exact_match_retrieve` - Find memories with exact content match
-5. `debug_retrieve` - Retrieve memories with similarity scores
+3. `recall_memory` - Retrieve memories using natural language time expressions 
+4. `search_by_tag` - Find memories using specific tags
+5. `exact_match_retrieve` - Find memories with exact content match
+6. `debug_retrieve` - Retrieve memories with similarity scores
 
 ### Database Management
 
-6. `create_backup` - Create database backup
-7. `get_stats` - Get memory statistics
-8. `optimize_db` - Optimize database performance
-9. `check_database_health` - Get database health metrics
-10. `check_embedding_model` - Verify model status
+7. `create_backup` - Create database backup
+8. `get_stats` - Get memory statistics
+9. `optimize_db` - Optimize database performance
+10. `check_database_health` - Get database health metrics
+11. `check_embedding_model` - Verify model status
 
 ### Memory Management
 
-11. `delete_memory` - Delete specific memory by hash
-12. `delete_by_tag` - Delete all memories with specific tag
-13. `cleanup_duplicates` - Remove duplicate entries
+12. `delete_memory` - Delete specific memory by hash
+13. `delete_by_tag` - Delete all memories with specific tag
+14. `cleanup_duplicates` - Remove duplicate entries
 
 ## Configuration Options
 
