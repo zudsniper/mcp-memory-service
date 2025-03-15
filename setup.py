@@ -64,6 +64,15 @@ def get_torch_packages():
             "torchvision>=0.15.0",
             "torchaudio>=2.0.0"
         ])
+    # For macOS Intel
+    elif IS_MACOS and IS_X86:
+        print("Detected macOS with Intel CPU")
+        packages.extend([
+            "torch==2.0.1",  # Fixed version for Intel Macs
+            "torchvision==0.15.2",
+            "torchaudio==2.0.2",
+            "sentence-transformers==2.2.2"  # Compatible version with torch 2.0.1
+        ])
     # For CUDA-enabled systems
     elif has_cuda():
         print("Detected CUDA support")

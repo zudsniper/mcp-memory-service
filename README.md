@@ -220,6 +220,9 @@ python scripts/verify_environment_enhanced.py
 
 # Verify PyTorch installation on Windows
 python scripts/verify_pytorch_windows.py
+
+# Perform comprehensive installation verification
+python scripts/test_installation.py
 ```
 
 ## Troubleshooting
@@ -229,10 +232,12 @@ See the [Installation Guide](docs/guides/installation.md#troubleshooting-common-
 ### Quick Troubleshooting Tips
 
 - **Windows PyTorch errors**: Use `python scripts/install_windows.py`
+- **macOS Intel dependency conflicts**: Use `python install.py --force-compatible-deps`
 - **Recursion errors**: Run `python scripts/fix_sitecustomize.py` 
 - **Environment verification**: Run `python scripts/verify_environment_enhanced.py`
 - **Memory issues**: Set `MCP_MEMORY_BATCH_SIZE=4` and try a smaller model
 - **Apple Silicon**: Ensure Python 3.10+ built for ARM64, set `PYTORCH_ENABLE_MPS_FALLBACK=1`
+- **Installation testing**: Run `python scripts/test_installation.py`
 
 ## Project Structure
 

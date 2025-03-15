@@ -68,9 +68,11 @@ Windows requires special handling for PyTorch installation due to platform-speci
    python scripts/fix_sitecustomize.py
    ```
 
-### macOS (Apple Silicon)
+### macOS
 
-For Apple Silicon Macs (M1/M2/M3):
+#### Apple Silicon (M1/M2/M3)
+
+For Apple Silicon Macs:
 
 1. **Ensure you're using Python 3.10+ built for ARM64**:
    ```bash
@@ -87,6 +89,38 @@ For Apple Silicon Macs (M1/M2/M3):
 3. **Enable MPS acceleration**:
    ```bash
    export PYTORCH_ENABLE_MPS_FALLBACK=1
+   ```
+
+#### Intel CPUs
+
+For Intel-based Macs, there are known dependency conflicts between PyTorch and sentence-transformers:
+
+1. **Use the installation script with the compatibility flag**:
+   ```bash
+   python install.py --force-compatible-deps
+   ```
+   
+   This installs specific compatible versions (torch==2.0.1 and sentence-transformers==2.2.2).
+
+2. **If installation fails, try the fallback option**:
+   ```bash
+   python install.py --fallback-deps
+   ```
+   
+   This uses older versions (torch==1.13.1) that are also compatible.
+
+3. **Manual installation (if the script fails)**:
+   ```bash
+   # First remove existing packages
+   pip uninstall -y torch torchvision torchaudio sentence-transformers
+   
+   # Install compatible versions
+   pip install torch==2.0.1 torchvision==0.15.2 torchaudio==0.15.2
+   pip install sentence-transformers==2.2.2
+   
+   # Install remaining dependencies
+   pip install --no-deps .
+   pip install chromadb==0.5.23 tokenizers==0.20.3 mcp>=1.0.0,<2.0.0
    ```
 
 ### Linux
@@ -247,6 +281,44 @@ If you're seeing dependency version conflicts:
 2. Install specific versions of problematic dependencies:
    ```bash
    pip install tokenizers==0.13.3
+   ```
+
+### PyTorch and sentence-transformers Conflicts on macOS Intel
+
+If you see errors like these on macOS with Intel CPUs:
+```
+Could not find a version that satisfies the requirement torch>=1.11.0, sentence-transformers requires that torch>=1.11.0
+```
+
+This is a known conflict between PyTorch and sentence-transformers versions on Intel Macs.
+
+**Solutions**:
+
+1. **Use the compatibility flag**:
+   ```bash
+   python install.py --force-compatible-deps
+   ```
+
+2. **Manual fix**:
+   ```bash
+   # Uninstall conflicting packages
+   pip uninstall -y torch torchvision torchaudio sentence-transformers
+   
+   # Install compatible versions in the correct order
+   pip install torch==2.0.1 torchvision==0.15.2 torchaudio==0.15.2
+   pip install sentence-transformers==2.2.2
+   
+   # Install the package with --no-deps
+   pip install --no-deps .
+   
+   # Install remaining dependencies
+   pip install chromadb==0.5.23 tokenizers==0.20.3 mcp>=1.0.0,<2.0.0 websockets>=11.0.3
+   ```
+
+3. **Fallback to older versions** (if above solutions fail):
+   ```bash
+   pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1
+   pip install sentence-transformers==2.2.2
    ```
 
 ## Debug and Verification Tools
