@@ -1,0 +1,280 @@
+# MCP Memory Service Installation Guide
+
+This guide provides detailed instructions for installing the MCP Memory Service on different platforms and troubleshooting common installation issues.
+
+## Prerequisites
+
+- Python 3.10 or newer
+- pip (latest version recommended)
+- A virtual environment (venv or conda)
+- Git (to clone the repository)
+
+## Standard Installation (All Platforms)
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/doobidoo/mcp-memory-service.git
+   cd mcp-memory-service
+   ```
+
+2. **Create and activate a virtual environment**:
+   ```bash
+   # Using venv (recommended)
+   python -m venv venv
+   
+   # On Windows
+   venv\Scripts\activate
+   
+   # On macOS/Linux
+   source venv/bin/activate
+   ```
+
+3. **Run the installation script**:
+   ```bash
+   python install.py
+   ```
+
+4. **Verify the installation**:
+   ```bash
+   python scripts/verify_environment_enhanced.py
+   ```
+
+## Platform-Specific Installation Instructions
+
+### Windows
+
+Windows requires special handling for PyTorch installation due to platform-specific wheel availability:
+
+1. **Use the Windows-specific installation script** (recommended):
+   ```bash
+   python scripts/install_windows.py
+   ```
+
+2. **Alternative: Manual PyTorch installation**:
+   ```bash
+   # First install PyTorch with the appropriate index URL
+   pip install torch==2.1.0 torchvision==2.1.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu118
+   
+   # Then install other dependencies without PyTorch
+   pip install -r requirements.txt --no-deps
+   pip install "mcp>=1.0.0,<2.0.0"
+   
+   # Finally install the package
+   pip install -e .
+   ```
+
+3. **Fix recursion issues** (if encountered):
+   ```bash
+   python scripts/fix_sitecustomize.py
+   ```
+
+### macOS (Apple Silicon)
+
+For Apple Silicon Macs (M1/M2/M3):
+
+1. **Ensure you're using Python 3.10+ built for ARM64**:
+   ```bash
+   python --version
+   python -c "import platform; print(platform.machine())"
+   # Should output "arm64"
+   ```
+
+2. **Run the standard installation**:
+   ```bash
+   python install.py
+   ```
+
+3. **Enable MPS acceleration**:
+   ```bash
+   export PYTORCH_ENABLE_MPS_FALLBACK=1
+   ```
+
+### Linux
+
+For Linux with NVIDIA GPU:
+
+1. **Ensure CUDA toolkit is installed**:
+   ```bash
+   nvidia-smi  # Check CUDA availability
+   ```
+
+2. **Run the standard installation**:
+   ```bash
+   python install.py
+   ```
+
+For Linux with AMD GPU:
+
+1. **Ensure ROCm is installed** (for AMD GPUs):
+   ```bash
+   rocminfo  # Check ROCm availability
+   ```
+
+2. **Set ROCm environment variable before installation**:
+   ```bash
+   export MCP_MEMORY_USE_ROCM=1
+   python install.py
+   ```
+
+## Configuring Claude Desktop
+
+### Standard Configuration
+
+Add the following to your `claude_desktop_config.json` file:
+
+```json
+{
+  "memory": {
+    "command": "uv",
+    "args": [
+      "--directory",
+      "/path/to/mcp-memory-service",
+      "run",
+      "memory"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "/path/to/chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "/path/to/backups"
+    }
+  }
+}
+```
+
+### Windows-Specific Configuration
+
+For Windows, use the wrapper script:
+
+```json
+{
+  "memory": {
+    "command": "python",
+    "args": [
+      "C:\\path\\to\\mcp-memory-service\\memory_wrapper.py"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "C:\\Users\\YourUsername\\AppData\\Local\\mcp-memory\\chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "C:\\Users\\YourUsername\\AppData\\Local\\mcp-memory\\backups"
+    }
+  }
+}
+```
+
+## Troubleshooting Common Installation Issues
+
+### PyTorch Installation Errors on Windows
+
+If you see errors like:
+```
+error: Distribution `torch==2.5.1 @ registry+https://pypi.org/simple` can't be installed because it doesn't have a source distribution or wheel for the current platform
+```
+
+This means PyTorch doesn't have a wheel available for your Windows platform.
+
+**Solution**:
+1. Use the Windows-specific installation script:
+   ```bash
+   python scripts/install_windows.py
+   ```
+
+2. Or install PyTorch manually with the correct index URL:
+   ```bash
+   pip install torch==2.1.0 torchvision==2.1.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu118
+   ```
+
+### Recursion Errors Related to sitecustomize.py
+
+If you see errors like:
+```
+RecursionError: maximum recursion depth exceeded while calling a Python object
+```
+
+**Solution**:
+Run the sitecustomize fix script:
+```bash
+python scripts/fix_sitecustomize.py
+```
+
+### MPS Acceleration Issues on Apple Silicon
+
+If you're having issues with GPU acceleration on Apple Silicon:
+
+**Solution**:
+1. Set the MPS fallback environment variable:
+   ```bash
+   export PYTORCH_ENABLE_MPS_FALLBACK=1
+   ```
+
+2. If you're still having issues, force CPU-only mode:
+   ```bash
+   export MCP_MEMORY_FORCE_CPU=1
+   ```
+
+### Memory Issues or Slow Performance
+
+If you're experiencing out-of-memory errors or slow performance:
+
+**Solution**:
+1. Use a smaller batch size:
+   ```bash
+   export MCP_MEMORY_BATCH_SIZE=4
+   ```
+
+2. Use a smaller embedding model:
+   ```bash
+   export MCP_MEMORY_MODEL_NAME=paraphrase-MiniLM-L3-v2
+   ```
+
+### MCP Protocol Compatibility Issues
+
+If you're seeing "Method not found" errors or JSON error popups in Claude Desktop:
+
+**Solution**:
+Make sure you're using the latest version of the MCP Memory Service which includes protocol compatibility fixes. Check that your server.py contains the required MCP protocol methods:
+- resources/list
+- resources/read
+- resource_templates/list
+
+### Dependency Version Conflicts
+
+If you're seeing dependency version conflicts:
+
+**Solution**:
+1. Install dependencies with the `--no-deps` flag:
+   ```bash
+   pip install -r requirements.txt --no-deps
+   ```
+
+2. Install specific versions of problematic dependencies:
+   ```bash
+   pip install tokenizers==0.13.3
+   ```
+
+## Debug and Verification Tools
+
+Use these scripts to debug and verify your installation:
+
+```bash
+# Enhanced environment verification
+python scripts/verify_environment_enhanced.py
+
+# Export detailed diagnostics
+python scripts/verify_environment_enhanced.py --export
+
+# Windows-specific PyTorch verification
+python scripts/verify_pytorch_windows.py
+
+# Test the memory server directly
+python scripts/run_memory_server.py
+
+# Test basic operations
+python src/chroma_test_isolated.py
+```
+
+## Getting Help
+
+If you encounter issues not covered in this guide:
+
+1. Check the logs in Claude Desktop: `<log-directory>/mcp-server-memory.log`
+2. Run the memory server directly to see any errors: `python scripts/run_memory_server.py`
+3. Check the GitHub repository for issues or updates
+4. Contact the developer via Telegram: t.me/doobeedoo
