@@ -20,6 +20,9 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 - Database health monitoring
 - Duplicate detection and cleanup
 - Customizable embedding model
+- **Cross-platform compatibility** (Apple Silicon, Intel, Windows, Linux)
+- **Hardware-aware optimizations** for different environments
+- **Graceful fallbacks** for limited hardware resources
 
 ## Available Tools and Operations
 
@@ -107,9 +110,116 @@ The list covers all the core functionalities exposed through the MCP server's to
 - Regular database health monitoring recommended
 - Cloud storage sync must complete before access
 - Debug mode available for troubleshooting
+- Hardware-aware resource allocation
+- Adaptive batch sizes based on available memory
 
+## Hardware Compatibility
+
+The MCP Memory Service now includes enhanced cross-platform compatibility with the following features:
+
+- **Dynamic hardware detection**: Automatically detects the system architecture and available hardware accelerators
+- **Adaptive resource usage**: Adjusts memory usage and batch sizes based on available system resources
+- **Flexible model selection**: Chooses the optimal embedding model for the detected hardware
+- **Graceful fallbacks**: Falls back to lighter models or CPU-only mode when necessary
+
+### Supported Platforms
+
+| Platform | Architecture | Accelerator | Status |
+|----------|--------------|-------------|--------|
+| macOS | Apple Silicon (M1/M2/M3) | MPS | ✅ Fully supported |
+| macOS | Apple Silicon under Rosetta 2 | CPU | ✅ Supported with fallbacks |
+| macOS | Intel | CPU | ✅ Fully supported |
+| Windows | x86_64 | CUDA | ✅ Fully supported |
+| Windows | x86_64 | DirectML | ✅ Supported |
+| Windows | x86_64 | CPU | ✅ Supported with fallbacks |
+| Linux | x86_64 | CUDA | ✅ Fully supported |
+| Linux | x86_64 | ROCm | ✅ Supported |
+| Linux | x86_64 | CPU | ✅ Supported with fallbacks |
+| Linux | ARM64 | CPU | ✅ Supported with fallbacks |
 
 ## Installation
+
+### Enhanced Installation Script
+
+The project now includes an enhanced installation script that automatically detects your system and installs the appropriate dependencies:
+
+```bash
+# Clone the repository
+git clone https://github.com/doobidoo/mcp-memory-service.git
+cd mcp-memory-service
+
+# Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Run the installation script
+python install.py
+```
+
+The installation script will:
+1. Detect your system architecture and available hardware accelerators
+2. Install the appropriate dependencies for your platform
+3. Configure the optimal settings for your environment
+4. Verify the installation and provide diagnostics if needed
+
+### Platform-Specific Installation Notes
+
+#### Windows
+
+On Windows, PyTorch installation requires special handling due to platform-specific wheel availability. We provide a Windows-specific installation script that handles all the complexities:
+
+```bash
+# Run the Windows-specific installation script
+python scripts/install_windows.py
+```
+
+This script will:
+1. Detect CUDA availability and version
+2. Install the appropriate PyTorch version from the correct index URL
+3. Install other dependencies without conflicting with PyTorch
+4. Install the MCP Memory Service package
+5. Verify the installation
+
+For manual installation, you can use:
+
+```bash
+# First, install PyTorch with the appropriate index URL
+# For NVIDIA GPU (CUDA) support:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+
+# OR for CPU-only:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+# Then install other dependencies (without PyTorch)
+pip install -r requirements.txt --no-deps
+pip install "mcp>=1.0.0,<2.0.0"
+
+# Finally install the package
+pip install -e .
+```
+
+The standard installation script (`install.py`) will also attempt to handle this for you, but if you encounter issues, use the Windows-specific script above.
+
+#### macOS
+
+On macOS (especially Apple Silicon M1/M2/M3), the installation should work smoothly:
+
+```bash
+# The installation script will automatically detect Apple Silicon and use MPS acceleration
+python install.py
+```
+
+#### Linux
+
+On Linux, the installation depends on your GPU:
+
+```bash
+# For NVIDIA GPU (CUDA) support, ensure CUDA toolkit is installed
+# For AMD GPU (ROCm) support, ensure ROCm is installed
+
+# The installation script will detect your hardware and install appropriate dependencies
+python install.py
+```
 
 ### Installing via Smithery
 
@@ -120,16 +230,34 @@ npx -y @smithery/cli install @doobidoo/mcp-memory-service --client claude
 ```
 
 ### Manual Installation
+
 1. Create Python virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-2. Install dependencies:
+2. Install dependencies (platform-specific):
+
+For macOS/Linux:
 ```bash
 pip install -r requirements.txt
 uv add mcp
+pip install -e .
+```
+
+For Windows:
+```bash
+# Option 1: Use the Windows-specific installation script (recommended)
+python scripts/install_windows.py
+
+# Option 2: Manual installation
+# First install PyTorch with the appropriate index URL
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+# Then install other dependencies (without PyTorch)
+pip install -r requirements.txt --no-deps
+pip install "mcp>=1.0.0,<2.0.0"
+# Finally install the package
 pip install -e .
 ```
 
@@ -146,6 +274,8 @@ python src/chroma_test_isolated.py
 
 ## Claude MCP configuration
 
+### Standard Configuration
+
 Add the following to your `claude_desktop_config.json` file:
 
 ```json
@@ -159,12 +289,38 @@ Add the following to your `claude_desktop_config.json` file:
       "memory"
     ],
     "env": {
-      "MCP_MEMORY_CHROMA_PATH": "your_chroma_db_path",  # e.g., "C:\\Users\\John.Doe \\AppData\\Local\\mcp-memory\\chroma_db", 
-      "MCP_MEMORY_BACKUPS_PATH": "your_backups_path"  # e.g., "C:\\Users\\John.Doe \\AppData\\Local\\mcp-memory\\backups"
+      "MCP_MEMORY_CHROMA_PATH": "your_chroma_db_path",  # e.g., "C:\\Users\\John.Doe\\AppData\\Local\\mcp-memory\\chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "your_backups_path"  # e.g., "C:\\Users\\John.Doe\\AppData\\Local\\mcp-memory\\backups"
     }
   }
 }
 ```
+
+### Windows-Specific Configuration (Recommended)
+
+For Windows users, we recommend using the wrapper script to ensure PyTorch is properly installed:
+
+```json
+{
+  "memory": {
+    "command": "python",
+    "args": [
+      "C:\\path\\to\\mcp-memory-service\\memory_wrapper.py"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "C:\\Users\\YourUsername\\AppData\\Local\\mcp-memory\\chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "C:\\Users\\YourUsername\\AppData\\Local\\mcp-memory\\backups"
+    }
+  }
+}
+```
+
+The wrapper script will:
+1. Check if PyTorch is installed and properly configured
+2. Install PyTorch with the correct index URL if needed
+3. Run the memory server with the appropriate configuration
+
+This ensures that the memory service works correctly on Windows platforms.
 
 ### Storage Structure and Settings
 ```
@@ -183,6 +339,13 @@ SIMILARITY_THRESHOLD: Default similarity threshold (default: 0.7)
 MAX_RESULTS_PER_QUERY: Maximum results per query (default: 10)
 BACKUP_RETENTION_DAYS: Number of days to keep backups (default: 7)
 LOG_LEVEL: Logging level (default: INFO)
+
+# Hardware-specific environment variables
+PYTORCH_ENABLE_MPS_FALLBACK: Enable MPS fallback for Apple Silicon (default: 1)
+MCP_MEMORY_USE_ONNX: Use ONNX Runtime for CPU-only deployments (default: 0)
+MCP_MEMORY_USE_DIRECTML: Use DirectML for Windows acceleration (default: 0)
+MCP_MEMORY_MODEL_NAME: Override the default embedding model
+MCP_MEMORY_BATCH_SIZE: Override the default batch size
 ```
 
 ## Sample Use Cases
@@ -203,6 +366,8 @@ Call by tool name:
 - Regular database health monitoring recommended
 - Cloud storage sync must complete before access
 - Debug mode available for troubleshooting
+- Hardware-aware resource allocation
+- Adaptive batch sizes based on available memory
 
 ## Testing
 
@@ -219,6 +384,12 @@ pytest tests/
 pytest tests/test_memory_ops.py
 pytest tests/test_semantic_search.py
 pytest tests/test_database.py
+
+# Verify environment compatibility
+python scripts/verify_environment_enhanced.py
+
+# Verify PyTorch installation on Windows
+python scripts/verify_pytorch_windows.py
 ```
 
 Test scripts are available in the `tests/` directory:
@@ -249,7 +420,8 @@ Each test file includes:
 │   ├── __init__.py
 │   ├── db_utils.py    # Database utility functions
 │   ├── debug.py       # Debugging utilities
-│   └── hashing.py     # Hashing utilities
+│   ├── hashing.py     # Hashing utilities
+│   └── system_detection.py  # Hardware detection utilities
 ├── config.py     # Configuration utilities
 └──server.py     # Main MCP server
 ```
@@ -260,7 +432,12 @@ Each test file includes:
 ├── scripts/
 │   ├── migrate_tags.py    # Tag migration script
 │   ├── repair_memories.py # Memory repair script
-│   └── validate_memories.py # Memory validation script
+│   ├── validate_memories.py # Memory validation script
+│   ├── verify_environment_enhanced.py # Enhanced environment verification
+│   └── verify_pytorch_windows.py # Windows-specific PyTorch verification
+├── memory_wrapper.py      # Windows wrapper script for Claude Desktop
+├── setup.py    # Setup script with platform-specific dependencies
+├── install.py  # Enhanced installation script
 └── tests/
     ├── __init__.py
     ├── test_memory_ops.py
@@ -270,29 +447,101 @@ Each test file includes:
 
 ## Required Dependencies
 ```
+# Core dependencies
 chromadb==0.5.23
 sentence-transformers>=2.2.2
-tokenizers==0.20.3
+tokenizers>=0.13.3,<0.21.0
 websockets>=11.0.3
-pytest>=7.0.0
-pytest-asyncio>=0.21.0
+mcp>=1.0.0,<2.0.0
+
+# PyTorch - platform-specific versions installed automatically
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Optional dependencies for specific platforms
+# onnxruntime>=1.15.0  # For CPU-only deployments
+# torch-directml>=0.2.0  # For Windows DirectML acceleration
 ```
 
-## Important Notes
-- When storing in cloud, always ensure iCloud or other Cloud Drives sync is complete before accessing from another device
-- Regular backups are crucial when testing new features
-- Monitor ChromaDB storage size and optimize as needed
-- The service includes automatic backup functionality that runs every 24 hours(tbd)
-- Debug mode is available for troubleshooting semantic search results
-- Memory optimization runs automatically when database size exceeds configured thresholds
-
-## Performance Considerations
-- Default similarity threshold for semantic search: 0.7
-- Maximum recommended memories per query: 10
-- Automatic optimization triggers at 10,000 memories
-- Backup retention policy: 7 days
-
 ## Troubleshooting
+
+### Enhanced Diagnostics
+
+The project now includes enhanced diagnostics tools to help troubleshoot issues:
+
+```bash
+# Run the enhanced environment verification script
+python scripts/verify_environment_enhanced.py
+
+# Export detailed diagnostics to a JSON file
+python scripts/verify_environment_enhanced.py --export
+```
+
+The verification script will:
+1. Check your system architecture and hardware capabilities
+2. Verify that all required dependencies are installed correctly
+3. Test the embedding model and ChromaDB functionality
+4. Provide detailed diagnostics and recommendations for any issues found
+
+### Common Issues
+
+#### PyTorch Installation Issues on Windows
+
+If you encounter errors like:
+```
+error: Distribution `torch==2.5.1 @ registry+https://pypi.org/simple` can't be installed because it doesn't have a source distribution or wheel for the current platform
+
+hint: You're on Windows (`win_amd64`), but `torch` (v2.5.1) only has wheels for the following platform: `manylinux1_x86_64`
+```
+
+This means PyTorch doesn't have a wheel available for your Windows platform. To fix this:
+
+1. **Use the Windows-specific installation script** (recommended):
+   ```bash
+   python scripts/install_windows.py
+   ```
+   This script handles all the complexities of installing PyTorch on Windows, including:
+   - Detecting CUDA availability and version
+   - Installing the appropriate PyTorch version from the correct index URL
+   - Installing other dependencies without conflicting with PyTorch
+   - Verifying the installation
+
+2. **Manual installation**: Install PyTorch manually with the appropriate index URL:
+   ```bash
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+   ```
+   Then install other dependencies without PyTorch:
+   ```bash
+   pip install -r requirements.txt --no-deps
+   pip install "mcp>=1.0.0,<2.0.0"
+   ```
+   Finally, install the package:
+   ```bash
+   pip install -e .
+   ```
+
+3. **Version specification**: If you need a specific version, use:
+   ```bash
+   pip install torch==2.1.0 torchvision==2.1.0 torchaudio==2.1.0 --index-url https://download.pytorch.org/whl/cu118
+   ```
+
+4. **Check compatibility**: Visit [PyTorch's website](https://pytorch.org/get-started/locally/) to find the latest version with Windows wheels available.
+
+5. **Verify installation**: Run the Windows-specific verification script:
+   ```bash
+   python scripts/verify_pytorch_windows.py
+   ```
+   This script will check if PyTorch is properly installed and configured for Windows.
+
+#### Other Common Issues
+
+- **Installation fails on Apple Silicon**: Make sure you're using Python 3.10+ built for ARM64
+- **CUDA not detected on Windows/Linux**: Ensure CUDA toolkit is installed and in PATH
+- **Out of memory errors**: Try setting a smaller batch size with `MCP_MEMORY_BATCH_SIZE=4`
+- **Slow performance on CPU**: Consider using a smaller model with `MCP_MEMORY_MODEL_NAME=paraphrase-MiniLM-L3-v2`
+
+Additional troubleshooting:
 - Check logs in `..\Claude\logs\mcp-server-memory.log`
 - Use `debug_retrieve` for search issues
 - Monitor database health with `check_database_health`

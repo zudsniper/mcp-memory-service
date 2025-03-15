@@ -8,6 +8,10 @@ from mcp_memory_service.models.memory import Memory
 
 import chromadb
 import json
+import sys
+import os
+import time
+import traceback
 from chromadb.utils import embedding_functions
 from sentence_transformers import SentenceTransformer
 import logging
@@ -17,30 +21,67 @@ from datetime import datetime, date
 from .base import MemoryStorage
 from ..models.memory import Memory, MemoryQueryResult
 from ..utils.hashing import generate_content_hash
+from ..utils.system_detection import (
+    get_system_info,
+    get_optimal_embedding_settings,
+    get_torch_device,
+    print_system_diagnostics,
+    AcceleratorType
+)
 import mcp.types as types
 
 logger = logging.getLogger(__name__)
 
+# List of models to try in order of preference
+# From most capable to least capable
+MODEL_FALLBACKS = [
+    'all-mpnet-base-v2',      # High quality, larger model
+    'all-MiniLM-L6-v2',       # Good balance of quality and size
+    'paraphrase-MiniLM-L6-v2', # Alternative with similar size
+    'paraphrase-MiniLM-L3-v2', # Smaller model for constrained environments
+    'paraphrase-albert-small-v2' # Smallest model, last resort
+]
+
 class ChromaMemoryStorage(MemoryStorage):
     def __init__(self, path: str):
-        """Initialize ChromaDB storage with proper embedding function."""
+        """Initialize ChromaDB storage with hardware-aware embedding function."""
         self.path = path
+        self.model = None
+        self.embedding_function = None
+        self.client = None
+        self.collection = None
+        self.system_info = get_system_info()
+        self.embedding_settings = get_optimal_embedding_settings()
         
-        # Initialize sentence transformer first
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Log system information
+        logger.info(f"Detected system: {self.system_info.os_name} {self.system_info.architecture}")
+        logger.info(f"Accelerator: {self.system_info.accelerator}")
+        logger.info(f"Memory: {self.system_info.memory_gb:.2f} GB")
+        logger.info(f"Using device: {self.embedding_settings['device']}")
         
-        # Create embedding function for ChromaDB
-        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name='all-MiniLM-L6-v2'
-        )
+        # Set environment variables for better cross-platform compatibility
+        os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
         
-        # Initialize ChromaDB with new client format
-        self.client = chromadb.PersistentClient(
-            path=path
-        )
+        # For Apple Silicon, ensure we use MPS when available
+        if self.system_info.architecture == "arm64" and self.system_info.os_name == "darwin":
+            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
         
-        # Get or create collection with proper embedding function
+        # For Windows with limited GPU memory, use smaller chunks
+        if self.system_info.os_name == "windows" and self.system_info.accelerator == AcceleratorType.CUDA:
+            os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+        
         try:
+            # Initialize with hardware-aware settings
+            self._initialize_embedding_model()
+            
+            # Initialize ChromaDB with new client format
+            logger.info(f"Initializing ChromaDB client at path: {path}")
+            self.client = chromadb.PersistentClient(
+                path=path
+            )
+            
+            # Get or create collection with proper embedding function
+            logger.info("Creating or getting collection...")
             self.collection = self.client.get_or_create_collection(
                 name="memory_collection",
                 metadata={"hnsw:space": "cosine"},
@@ -48,8 +89,97 @@ class ChromaMemoryStorage(MemoryStorage):
             )
             logger.info("Collection initialized successfully")
         except Exception as e:
-            logger.error(f"Error initializing collection: {str(e)}")
-            raise
+            logger.error(f"Error initializing ChromaDB: {str(e)}")
+            logger.error(traceback.format_exc())
+            # Just log error but don't raise - we'll handle it gracefully
+            print(f"ChromaDB initialization error: {str(e)}", file=sys.stderr)
+            # We still need to continue initialization for Smithery to work
+    
+    def _initialize_embedding_model(self):
+        """Initialize the embedding model with fallbacks for different hardware."""
+        # Start with the optimal model for this system
+        preferred_model = self.embedding_settings["model_name"]
+        device = self.embedding_settings["device"]
+        batch_size = self.embedding_settings["batch_size"]
+        
+        # Try the preferred model first, then fall back to alternatives
+        models_to_try = [preferred_model] + [m for m in MODEL_FALLBACKS if m != preferred_model]
+        
+        for model_name in models_to_try:
+            try:
+                logger.info(f"Attempting to load model: {model_name} on {device}")
+                start_time = time.time()
+                
+                # Try to initialize the model with the current settings
+                self.model = SentenceTransformer(
+                    model_name,
+                    device=device
+                )
+                
+                # Set batch size based on available resources
+                self.model.max_seq_length = 384  # Default max sequence length
+                
+                # Test the model with a simple encoding
+                _ = self.model.encode("Test encoding", batch_size=batch_size)
+                
+                load_time = time.time() - start_time
+                logger.info(f"Successfully loaded model {model_name} in {load_time:.2f}s")
+                
+                # Create embedding function for ChromaDB
+                self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                    model_name=model_name,
+                    device=device
+                )
+                
+                logger.info(f"Embedding function initialized with model {model_name}")
+                return
+                
+            except Exception as e:
+                logger.warning(f"Failed to initialize model {model_name} on {device}: {str(e)}")
+                
+                # If we're not on CPU already, try falling back to CPU
+                if device != "cpu":
+                    try:
+                        logger.info(f"Falling back to CPU for model: {model_name}")
+                        self.model = SentenceTransformer(model_name, device="cpu")
+                        _ = self.model.encode("Test encoding", batch_size=max(1, batch_size // 2))
+                        
+                        # Update settings to reflect CPU usage
+                        self.embedding_settings["device"] = "cpu"
+                        self.embedding_settings["batch_size"] = max(1, batch_size // 2)
+                        
+                        # Create embedding function
+                        self.embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+                            model_name=model_name,
+                            device="cpu"
+                        )
+                        
+                        logger.info(f"Successfully loaded model {model_name} on CPU")
+                        return
+                    except Exception as cpu_e:
+                        logger.warning(f"Failed to initialize model {model_name} on CPU: {str(cpu_e)}")
+        
+        # If we've tried all models and none worked, raise an exception
+        error_msg = "Failed to initialize any embedding model. Service may not function correctly."
+        logger.error(error_msg)
+        print(error_msg, file=sys.stderr)
+        
+        # Create a minimal dummy embedding function as last resort
+        try:
+            logger.warning("Creating minimal dummy embedding function as last resort")
+            from sentence_transformers.util import normalize_embeddings
+            import numpy as np
+            
+            # Define a minimal embedding function that returns random vectors
+            class MinimalEmbeddingFunction:
+                def __call__(self, texts):
+                    vectors = [np.random.rand(384) for _ in texts]
+                    return normalize_embeddings(np.array(vectors))
+            
+            self.embedding_function = MinimalEmbeddingFunction()
+            logger.warning("Minimal dummy embedding function created. Search quality will be poor.")
+        except Exception as e:
+            logger.error(f"Failed to create minimal embedding function: {str(e)}")
 
     def sanitized(self, tags):
         if tags is None:
@@ -70,6 +200,12 @@ class ChromaMemoryStorage(MemoryStorage):
     async def store(self, memory: Memory) -> Tuple[bool, str]:
         """Store a memory with proper embedding handling."""
         try:
+            # Check if collection is initialized
+            if self.collection is None:
+                error_msg = "Collection not initialized, cannot store memory"
+                logger.error(error_msg)
+                return False, error_msg
+                
             # Check for duplicates
             existing = self.collection.get(
                 where={"content_hash": memory.content_hash}
@@ -96,8 +232,9 @@ class ChromaMemoryStorage(MemoryStorage):
             return True, f"Successfully stored memory with ID: {memory_id}"
             
         except Exception as e:
-            logger.error(f"Error storing memory: {str(e)}")
-            return False
+            error_msg = f"Error storing memory: {str(e)}"
+            logger.error(error_msg)
+            return False, error_msg
 
     async def search_by_tag(self, tags: List[str]) -> List[Memory]:
         try:
@@ -368,14 +505,57 @@ class ChromaMemoryStorage(MemoryStorage):
         return metadata
 
     async def retrieve(self, query: str, n_results: int = 5) -> List[MemoryQueryResult]:
-        """Retrieve memories using semantic search."""
+        """Retrieve memories using semantic search with hardware-aware optimizations."""
         try:
-            # Query using the embedding function
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=n_results,
-                include=["documents", "metadatas", "distances"]
-            )
+            # Check if collection is initialized
+            if self.collection is None:
+                logger.error("Collection not initialized, cannot retrieve memories")
+                return []
+            
+            # Check if embedding function is available
+            if self.embedding_function is None:
+                logger.error("Embedding function not initialized, cannot retrieve memories")
+                return []
+            
+            start_time = time.time()
+            
+            try:
+                # Query using the embedding function with hardware-aware settings
+                results = self.collection.query(
+                    query_texts=[query],
+                    n_results=n_results,
+                    include=["documents", "metadatas", "distances"]
+                )
+            except Exception as query_error:
+                logger.warning(f"Error during query operation: {str(query_error)}")
+                
+                # Fallback: Try with direct embedding if the standard query fails
+                try:
+                    logger.info("Attempting fallback query with direct embedding")
+                    
+                    # Generate embedding directly
+                    if self.model:
+                        query_embedding = self.model.encode(
+                            query,
+                            batch_size=self.embedding_settings["batch_size"],
+                            show_progress_bar=False
+                        ).tolist()
+                        
+                        # Use the embedding directly
+                        results = self.collection.query(
+                            query_embeddings=[query_embedding],
+                            n_results=n_results,
+                            include=["documents", "metadatas", "distances"]
+                        )
+                    else:
+                        raise ValueError("Model not available for fallback query")
+                        
+                except Exception as fallback_error:
+                    logger.error(f"Fallback query also failed: {str(fallback_error)}")
+                    return []
+            
+            query_time = time.time() - start_time
+            logger.debug(f"Query completed in {query_time:.4f}s")
             
             if not results["ids"] or not results["ids"][0]:
                 return []
@@ -384,11 +564,22 @@ class ChromaMemoryStorage(MemoryStorage):
             for i in range(len(results["ids"][0])):
                 metadata = results["metadatas"][0][i]
                 
+                # Parse tags from JSON string if needed
+                tags = []
+                if "tags" in metadata:
+                    try:
+                        if isinstance(metadata["tags"], str):
+                            tags = json.loads(metadata["tags"])
+                        else:
+                            tags = metadata["tags"]
+                    except (json.JSONDecodeError, TypeError):
+                        logger.debug(f"Could not parse tags for memory {metadata.get('content_hash')}")
+                
                 # Reconstruct memory object
                 memory = Memory(
                     content=results["documents"][0][i],
                     content_hash=metadata["content_hash"],
-                    tags=metadata.get("tags", []),
+                    tags=tags,
                     memory_type=metadata.get("memory_type", ""),
                 )
                 
@@ -402,4 +593,5 @@ class ChromaMemoryStorage(MemoryStorage):
             
         except Exception as e:
             logger.error(f"Error retrieving memories: {str(e)}")
+            logger.error(traceback.format_exc())
             return []

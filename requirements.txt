@@ -1,4 +1,25 @@
+# Core dependencies
 chromadb==0.5.23
 sentence-transformers>=2.2.2
-tokenizers==0.20.3
+tokenizers>=0.13.3,<0.21.0
 websockets>=11.0.3
+mcp>=1.0.0,<2.0.0
+
+# PyTorch - DO NOT UNCOMMENT THESE LINES
+
+# PyTorch requirements with CUDA cu118
+# These must be installed with: pip install <package>==<version> --index-url=https://download.pytorch.org/whl/cu118
+# torch==2.6.0  # Install from cu118 index
+# torchvision==0.21.0  # Install from cu118 index
+# torchaudio==2.6.0  # Install from cu118 index
+# PyTorch will be installed with appropriate platform-specific packages by setup.py and install.py
+# For Windows: PyTorch will be installed from https://download.pytorch.org/whl/
+# For macOS/Linux: PyTorch will be installed from PyPI
+# torch>=2.0.0
+# torchvision>=0.15.0
+# torchaudio>=2.0.0
+
+# Optional dependencies for specific platforms
+# These will be installed conditionally by setup.py
+# onnxruntime>=1.15.0  # For CPU-only deployments
+# torch-directml>=0.2.0  # For Windows DirectML acceleration

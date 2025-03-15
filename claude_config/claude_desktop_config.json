@@ -1,6 +1,6 @@
 {
-    "mcp-memory": {
-        "chroma_db": "/Users/hkr/Documents/GitHub/mcp-memory-service/data/chroma_db",
-        "backup_path": "/Users/hkr/Documents/GitHub/mcp-memory-service/data/backups"
-    }
+  "mcp-memory": {
+    "chroma_db": "C:\\Users\\heinrich.krupp\\AppData\\Local\\mcp-memory\\chroma_db",
+    "backup_path": "C:\\Users\\heinrich.krupp\\AppData\\Local\\mcp-memory\\backups"
+  }
 }

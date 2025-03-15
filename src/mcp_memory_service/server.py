@@ -17,7 +17,7 @@ from mcp.server.models import InitializationOptions
 import mcp.types as types
 from mcp.server import NotificationOptions, Server
 import mcp.server.stdio
-from mcp.types import Resource
+from mcp.types import Resource, Prompt
 
 from .config import (
     CHROMA_PATH,
@@ -210,6 +210,13 @@ class MemoryServer:
         @self.server.list_resource_templates()
         async def handle_list_resource_templates() -> List[types.ResourceTemplate]:
             # Return an empty list of resource templates
+            return []
+        
+        @self.server.list_prompts()
+        async def handle_list_prompts() -> List[types.Prompt]:
+            # Return an empty list of prompts
+            # This is required by the MCP protocol even if we don't provide any prompts
+            logger.debug("Handling prompts/list request")
             return []
         
         # Add a custom error handler for unsupported methods

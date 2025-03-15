@@ -54,8 +54,40 @@ def get_base_directory() -> str:
 # Initialize paths
 try:
     BASE_DIR = get_base_directory()
-    CHROMA_PATH = validate_and_create_path(os.path.join(BASE_DIR, 'chroma_db'))
-    BACKUPS_PATH = validate_and_create_path(os.path.join(BASE_DIR, 'backups'))
+    
+    # Try multiple environment variable names for ChromaDB path
+    chroma_path = None
+    for env_var in ['MCP_MEMORY_CHROMA_PATH', 'mcpMemoryChromaPath']:
+        if path := os.getenv(env_var):
+            chroma_path = path
+            logger.info(f"Using {env_var}={path} for ChromaDB path")
+            break
+    
+    # If no environment variable is set, use the default path
+    if not chroma_path:
+        chroma_path = os.path.join(BASE_DIR, 'chroma_db')
+        logger.info(f"No ChromaDB path environment variable found, using default: {chroma_path}")
+
+    # Try multiple environment variable names for backups path
+    backups_path = None
+    for env_var in ['MCP_MEMORY_BACKUPS_PATH', 'mcpMemoryBackupsPath']:
+        if path := os.getenv(env_var):
+            backups_path = path
+            logger.info(f"Using {env_var}={path} for backups path")
+            break
+    
+    # If no environment variable is set, use the default path
+    if not backups_path:
+        backups_path = os.path.join(BASE_DIR, 'backups')
+        logger.info(f"No backups path environment variable found, using default: {backups_path}")
+    
+    CHROMA_PATH = validate_and_create_path(chroma_path)
+    BACKUPS_PATH = validate_and_create_path(backups_path)
+
+    # Print the final paths used
+    logger.info(f"Using ChromaDB path: {CHROMA_PATH}")
+    logger.info(f"Using backups path: {BACKUPS_PATH}")
+
 except Exception as e:
     logger.error(f"Fatal error initializing paths: {str(e)}")
     sys.exit(1)
