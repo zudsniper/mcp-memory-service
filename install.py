@@ -702,12 +702,12 @@ def verify_installation():
         print_error("ChromaDB is not installed correctly")
         return False
     
-    # Check if MCP package is installed correctly
+    # Check if MCP Memory Service package is installed correctly
     try:
-        import mcp
-        print_success(f"MCP is installed: {mcp.__version__}")
+        import mcp_memory_service
+        print_success(f"MCP Memory Service is installed: {mcp_memory_service.__version__}")
     except ImportError:
-        print_error("MCP is not installed correctly")
+        print_error("MCP Memory Service is not installed correctly")
         return False
     
     # Additional checks for macOS Intel
