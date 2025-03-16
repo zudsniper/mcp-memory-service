@@ -249,10 +249,13 @@ def install_pytorch_macos_intel():
     """Install PyTorch specifically for macOS with Intel CPUs."""
     print_step("3a", "Installing PyTorch for macOS Intel CPU")
     
-    # Use a version combination that's known to work with sentence-transformers
-    # and is compatible with Intel Macs
+    # Use the versions known to work well on macOS Intel
     try:
-        torch_version = "2.0.1"  # This version works well with Intel Macs and sentence-transformers
+        # Install specific versions that are known to be compatible with Intel macOS
+        torch_version = "1.13.1"
+        torch_vision_version = "0.14.1"
+        torch_audio_version = "0.13.1"
+        st_version = "2.2.2"
         
         print_info(f"Installing PyTorch {torch_version} for macOS Intel...")
         
@@ -260,15 +263,14 @@ def install_pytorch_macos_intel():
         cmd = [
             sys.executable, '-m', 'pip', 'install',
             f"torch=={torch_version}",
-            f"torchvision=={torch_version}",
-            f"torchaudio=={torch_version}"
+            f"torchvision=={torch_vision_version}",
+            f"torchaudio=={torch_audio_version}"
         ]
         
         print_info(f"Running: {' '.join(cmd)}")
         subprocess.check_call(cmd)
         
         # Install a compatible version of sentence-transformers
-        st_version = "2.2.2"  # This version is known to work with torch 2.0.1
         print_info(f"Installing sentence-transformers {st_version}...")
         
         cmd = [
@@ -279,31 +281,17 @@ def install_pytorch_macos_intel():
         print_info(f"Running: {' '.join(cmd)}")
         subprocess.check_call(cmd)
         
-        print_success("PyTorch and sentence-transformers installed successfully for macOS Intel")
+        print_success(f"PyTorch {torch_version} and sentence-transformers {st_version} installed successfully for macOS Intel")
         return True
     except subprocess.SubprocessError as e:
         print_error(f"Failed to install PyTorch for macOS Intel: {e}")
+        
         # Provide fallback instructions
-        print_warning("You may need to manually install compatible versions:")
-        print_info("pip install torch==2.0.1 torchvision==2.0.1 torchaudio==2.0.1")
+        print_warning("You may need to manually install compatible versions for Intel macOS:")
+        print_info("pip install torch==1.13.1 torchvision==0.14.1 torchaudio==0.13.1")
         print_info("pip install sentence-transformers==2.2.2")
         
-        # Try fallback mode if the primary installation failed
-        try:
-            print_info("Attempting fallback installation with looser version constraints...")
-            # Fallback to an older version known to be compatible
-            subprocess.check_call([
-                sys.executable, '-m', 'pip', 'install',
-                "torch==1.13.1", 
-                "torchvision==0.14.1",
-                "torchaudio==0.13.1",
-                "sentence-transformers==2.2.2"
-            ])
-            print_success("Fallback installation successful")
-            return True
-        except subprocess.SubprocessError as fallback_e:
-            print_error(f"Fallback installation failed: {fallback_e}")
-            return False
+        return False
 
 def install_pytorch_windows(gpu_info):
     """Install PyTorch on Windows using the appropriate index URL."""
