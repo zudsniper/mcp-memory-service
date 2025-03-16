@@ -23,6 +23,8 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
+py310_venv/
 .env
 
 # IDE
@@ -39,6 +41,8 @@ backups/
 test_output.txt
 claude_desktop_config_updated.json
 claude_config/claude_desktop_config.json
+=1.0.0,
+=11.0.3
 
 # macOS
 .DS_Store

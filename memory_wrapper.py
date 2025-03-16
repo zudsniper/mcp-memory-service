@@ -293,35 +293,82 @@ os.environ["PIP_NO_INSTALL"] = "1"
         print_debug(f"Could not patch pip: {e}")
 
 def install_pytorch(no_auto_install=False):
-    """Install PyTorch using the Windows-specific installation script."""
+    """Install PyTorch using the platform-specific installation method."""
     if no_auto_install:
         print_warning("Automatic PyTorch installation is disabled")
         return False
+    
+    # Get the system information
+    system = platform.system().lower()
+    machine = platform.machine().lower()
+    
+    # Determine the appropriate installation method based on the platform
+    if system == "windows":
+        print_info("Installing PyTorch using the Windows-specific installation script")
         
-    print_info("Installing PyTorch using the Windows-specific installation script")
-    
-    # Get the directory of this script
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Run the Windows-specific installation script
-    install_script = os.path.join(script_dir, "scripts", "install_windows.py")
-    if os.path.exists(install_script):
+        # Get the directory of this script
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Run the Windows-specific installation script
+        install_script = os.path.join(script_dir, "scripts", "install_windows.py")
+        if os.path.exists(install_script):
+            try:
+                print_debug(f"Running installation script: {install_script}")
+                subprocess.check_call([sys.executable, install_script])
+                print_success("PyTorch installed successfully")
+                
+                # Reload sys.path to include newly installed packages
+                print_debug("Reloading sys.path to include newly installed packages")
+                site.main()
+                
+                return True
+            except subprocess.SubprocessError as e:
+                print_error(f"Failed to install PyTorch: {e}")
+                return False
+        else:
+            print_error(f"Installation script not found: {install_script}")
+            return False
+    elif system == "darwin":  # macOS
+        print_info("Installing PyTorch for macOS")
         try:
-            print_debug(f"Running installation script: {install_script}")
-            subprocess.check_call([sys.executable, install_script])
-            print_success("PyTorch installed successfully")
+            # Install PyTorch for macOS - Use the specific versions you need
+            print_debug("Installing PyTorch for macOS using pip")
+            subprocess.check_call([
+                sys.executable, '-m', 'pip', 'install',
+                "torch==1.13.1",
+                "torchvision==0.14.1",
+                "torchaudio==0.13.1"
+            ])
             
             # Reload sys.path to include newly installed packages
             print_debug("Reloading sys.path to include newly installed packages")
             site.main()
             
+            print_success("PyTorch installed successfully for macOS")
+            return True
+        except subprocess.SubprocessError as e:
+            print_error(f"Failed to install PyTorch for macOS: {e}")
+            return False
+    else:  # Linux or other platforms
+        print_info("Installing PyTorch for Linux/other platform")
+        try:
+            # Generic PyTorch installation for Linux
+            subprocess.check_call([
+                sys.executable, '-m', 'pip', 'install',
+                "torch==1.13.1",
+                "torchvision==0.14.1", 
+                "torchaudio==0.13.1"
+            ])
+            
+            # Reload sys.path to include newly installed packages
+            print_debug("Reloading sys.path to include newly installed packages")
+            site.main()
+            
+            print_success("PyTorch installed successfully")
             return True
         except subprocess.SubprocessError as e:
             print_error(f"Failed to install PyTorch: {e}")
             return False
-    else:
-        print_error(f"Installation script not found: {install_script}")
-        return False
 
 def setup_environment(args):
     """Set up environment variables for the memory server."""
