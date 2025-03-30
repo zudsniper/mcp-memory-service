@@ -41,8 +41,9 @@ from .utils.system_detection import (
 from .utils.time_parser import extract_time_expression, parse_time_expression
 
 # Configure logging to go to stderr
+log_level = os.getenv('LOG_LEVEL', 'ERROR').upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, log_level, logging.ERROR),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     stream=sys.stderr
 )
