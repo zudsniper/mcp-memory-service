@@ -49,6 +49,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Check if UV is being used
+def check_uv_environment():
+    """Check if UV is being used and provide recommendations if not."""
+    running_with_uv = 'UV_ACTIVE' in os.environ or any('uv' in arg.lower() for arg in sys.argv)
+    
+    if not running_with_uv:
+        logger.info("Memory server is running without UV. For better performance and dependency management, consider using UV:")
+        logger.info("  pip install uv")
+        logger.info("  uv run memory")
+    else:
+        logger.info("Memory server is running with UV")
+    
+    return running_with_uv
+
 # Configure environment variables based on detected system
 def configure_environment():
     """Configure environment variables based on detected system."""
@@ -1027,6 +1041,9 @@ def parse_args():
 
 async def async_main():
     args = parse_args()
+    
+    # Check if running with UV
+    check_uv_environment()
     
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
