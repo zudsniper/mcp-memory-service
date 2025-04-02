@@ -554,6 +554,9 @@ def configure_paths(args):
     """Configure paths for the MCP Memory Service."""
     print_step("4", "Configuring paths")
     
+    # Get system info
+    system_info = detect_system()
+    
     # Determine home directory
     home_dir = Path.home()
     
