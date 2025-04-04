@@ -11,13 +11,17 @@ COPY requirements.txt .
 # Install the dependencies specified in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application code to the container
-COPY src/mcp_memory_service /app/src/mcp_memory_service
+# Copy the entire project to the container
+COPY . .
+
+# Install the package in development mode
+RUN pip install -e .
 
 # Set environment variables if needed. Adjust paths to point to default container locations.
 ENV MCP_MEMORY_CHROMA_PATH=/app/chroma_db \
     MCP_MEMORY_BACKUPS_PATH=/app/backups \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 # Create necessary directories for ChromaDB and backups
 RUN mkdir -p /app/chroma_db /app/backups
@@ -26,4 +30,4 @@ RUN mkdir -p /app/chroma_db /app/backups
 RUN chmod a+rw /dev/stdin /dev/stdout /dev/stderr
 
 # Specify the command to run the server with stdio handling
-ENTRYPOINT ["python", "-u", "src/mcp_memory_service/server.py"]
+ENTRYPOINT ["python", "-u", "-m", "mcp_memory_service.server"]

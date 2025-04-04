@@ -56,21 +56,34 @@ The service can be run in a Docker container for better isolation and deployment
 docker build -t mcp-memory-service .
 
 # Run the container
+# Note: On macOS, paths must be within Docker's allowed file sharing locations
+# Default allowed locations include:
+# - /Users
+# - /Volumes
+# - /private
+# - /tmp
+# - /var/folders
+
+# Example with proper macOS paths:
 docker run -it \
-  -v /path/to/chroma_db:/app/chroma_db \
-  -v /path/to/backups:/app/backups \
+  -v $HOME/mcp-memory/chroma_db:/app/chroma_db \
+  -v $HOME/mcp-memory/backups:/app/backups \
   mcp-memory-service
-```
 
-For production use, you might want to run it in detached mode:
-
-```bash
+# For production use, you might want to run it in detached mode:
 docker run -d \
-  -v /path/to/chroma_db:/app/chroma_db \
-  -v /path/to/backups:/app/backups \
+  -v $HOME/mcp-memory/chroma_db:/app/chroma_db \
+  -v $HOME/mcp-memory/backups:/app/backups \
   --name mcp-memory \
   mcp-memory-service
 ```
+
+To configure Docker's file sharing on macOS:
+1. Open Docker Desktop
+2. Go to Settings (Preferences)
+3. Navigate to Resources -> File Sharing
+4. Add any additional paths you need to share
+5. Click "Apply & Restart"
 
 ### Smithery Integration
 
@@ -87,8 +100,8 @@ To use with Smithery:
       "run",
       "-i",
       "--rm",
-      "-v", "/path/to/chroma_db:/app/chroma_db",
-      "-v", "/path/to/backups:/app/backups",
+      "-v", "$HOME/mcp-memory/chroma_db:/app/chroma_db",
+      "-v", "$HOME/mcp-memory/backups:/app/backups",
       "mcp-memory-service"
     ],
     "env": {
@@ -100,6 +113,35 @@ To use with Smithery:
 ```
 
 2. The `smithery.yaml` configuration handles stdio communication and environment setup automatically.
+
+### Testing with Claude Desktop
+
+To verify your Docker-based memory service is working correctly with Claude Desktop:
+
+1. Build the Docker image with `docker build -t mcp-memory-service .`
+2. Create the necessary directories for persistent storage:
+   ```bash
+   mkdir -p $HOME/mcp-memory/chroma_db $HOME/mcp-memory/backups
+   ```
+3. Update your Claude Desktop configuration file:
+   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - On Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - On Linux: `~/.config/Claude/claude_desktop_config.json`
+4. Restart Claude Desktop
+5. When Claude starts up, you should see the memory service initialize with a message:
+   ```
+   MCP Memory Service initialization completed
+   ```
+6. Test the memory feature:
+   - Ask Claude to remember something: "Please remember that my favorite color is blue"
+   - Later in the conversation or in a new conversation, ask: "What is my favorite color?"
+   - Claude should retrieve the information from the memory service
+
+If you experience any issues:
+- Check the Claude Desktop console for error messages
+- Verify Docker has the necessary permissions to access the mounted directories
+- Ensure the Docker container is running with the correct parameters
+- Try running the container manually to see any error output
 
 For detailed installation instructions, platform-specific guides, and troubleshooting, see our [documentation](docs/):
 
