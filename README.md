@@ -45,6 +45,62 @@ uv pip install -e .
 uv run memory
 ```
 
+## Docker and Smithery Integration
+
+### Docker Usage
+
+The service can be run in a Docker container for better isolation and deployment:
+
+```bash
+# Build the Docker image
+docker build -t mcp-memory-service .
+
+# Run the container
+docker run -it \
+  -v /path/to/chroma_db:/app/chroma_db \
+  -v /path/to/backups:/app/backups \
+  mcp-memory-service
+```
+
+For production use, you might want to run it in detached mode:
+
+```bash
+docker run -d \
+  -v /path/to/chroma_db:/app/chroma_db \
+  -v /path/to/backups:/app/backups \
+  --name mcp-memory \
+  mcp-memory-service
+```
+
+### Smithery Integration
+
+The service is configured for Smithery integration through `smithery.yaml`. This configuration enables stdio-based communication with MCP clients like Claude Desktop.
+
+To use with Smithery:
+
+1. Ensure your `claude_desktop_config.json` points to the correct paths:
+```json
+{
+  "memory": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-v", "/path/to/chroma_db:/app/chroma_db",
+      "-v", "/path/to/backups:/app/backups",
+      "mcp-memory-service"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "/app/chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "/app/backups"
+    }
+  }
+}
+```
+
+2. The `smithery.yaml` configuration handles stdio communication and environment setup automatically.
+
 For detailed installation instructions, platform-specific guides, and troubleshooting, see our [documentation](docs/):
 
 - [Installation Guide](docs/guides/installation.md) - Comprehensive installation instructions for all platforms
