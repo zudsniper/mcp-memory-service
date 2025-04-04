@@ -50,6 +50,7 @@ For detailed installation instructions, platform-specific guides, and troublesho
 - [Installation Guide](docs/guides/installation.md) - Comprehensive installation instructions for all platforms
 - [Troubleshooting Guide](docs/guides/troubleshooting.md) - Solutions for common issues
 - [Technical Documentation](docs/technical/) - Detailed technical procedures and specifications
+- [Scripts Documentation](docs/guides/scripts.md) - Overview of available scripts and their usage
 
 ## Configuration
 
