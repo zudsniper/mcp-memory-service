@@ -16,10 +16,14 @@ COPY src/mcp_memory_service /app/src/mcp_memory_service
 
 # Set environment variables if needed. Adjust paths to point to default container locations.
 ENV MCP_MEMORY_CHROMA_PATH=/app/chroma_db \
-    MCP_MEMORY_BACKUPS_PATH=/app/backups
+    MCP_MEMORY_BACKUPS_PATH=/app/backups \
+    PYTHONUNBUFFERED=1
 
 # Create necessary directories for ChromaDB and backups
 RUN mkdir -p /app/chroma_db /app/backups
 
-# Specify the command to run the server
-ENTRYPOINT ["python", "src/mcp_memory_service/server.py"]
+# Configure stdio for MCP communication
+RUN chmod a+rw /dev/stdin /dev/stdout /dev/stderr
+
+# Specify the command to run the server with stdio handling
+ENTRYPOINT ["python", "-u", "src/mcp_memory_service/server.py"]
