@@ -100,3 +100,7 @@ claude_config/claude_desktop_config.json
 dxdiag_output.txt
 dxdiag.txt
 tests/test_db/chroma.sqlite3
+
+**/node_modules
+**/wrangler.toml
+**/.wrangler

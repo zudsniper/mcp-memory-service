@@ -1,0 +1,11 @@
+name = "mcp-memory-cloudflare"
+main = "src/index.ts"
+compatibility_date = "2025-04-09"
+
+[[d1_databases]]
+binding = "DB"
+database_id = "1"
+database_name = "mcp_memory_service"
+
+[ai]
+binding = "AI"
