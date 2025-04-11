@@ -25,105 +25,132 @@ An MCP server providing semantic memory and persistent storage capabilities for 
 - **Hardware-aware optimizations** for different environments
 - **Graceful fallbacks** for limited hardware resources
 
-## Installation
+## Quick Start
 
-### Installation with UV (Recommended)
-
-UV is a fast, reliable Python package installer and resolver. Using UV with mcp-memory-service provides:
-
-- Faster dependency resolution, especially for complex dependencies like PyTorch
-- More reliable environment management
-- Better compatibility with different platforms
+For the fastest way to get started:
 
 ```bash
 # Install UV if not already installed
 pip install uv
 
-# Clone the repository
+# Clone and install
 git clone https://github.com/doobidoo/mcp-memory-service.git
 cd mcp-memory-service
-
-# Create and activate a virtual environment with UV
 uv venv
-
-# On Windows
-.venv\Scripts\activate
-
-# On Unix/macOS
-source .venv/bin/activate
-
-# Install dependencies with UV
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -r requirements.txt
-
-# Install the package
 uv pip install -e .
 
-# Run with UV
+# Run the service
 uv run memory
 ```
 
-For an even simpler experience, use our UV wrapper:
+## Docker and Smithery Integration
+
+### Docker Usage
+
+The service can be run in a Docker container for better isolation and deployment:
 
 ```bash
-# After activating your virtual environment
-python uv_wrapper.py
+# Build the Docker image
+docker build -t mcp-memory-service .
+
+# Run the container
+# Note: On macOS, paths must be within Docker's allowed file sharing locations
+# Default allowed locations include:
+# - /Users
+# - /Volumes
+# - /private
+# - /tmp
+# - /var/folders
+
+# Example with proper macOS paths:
+docker run -it \
+  -v $HOME/mcp-memory/chroma_db:/app/chroma_db \
+  -v $HOME/mcp-memory/backups:/app/backups \
+  mcp-memory-service
+
+# For production use, you might want to run it in detached mode:
+docker run -d \
+  -v $HOME/mcp-memory/chroma_db:/app/chroma_db \
+  -v $HOME/mcp-memory/backups:/app/backups \
+  --name mcp-memory \
+  mcp-memory-service
 ```
 
-### Alternative: Traditional Installation
+To configure Docker's file sharing on macOS:
+1. Open Docker Desktop
+2. Go to Settings (Preferences)
+3. Navigate to Resources -> File Sharing
+4. Add any additional paths you need to share
+5. Click "Apply & Restart"
 
-The enhanced installation script automatically detects your system and installs the appropriate dependencies:
+### Smithery Integration
 
-```bash
-# Clone the repository
-git clone https://github.com/doobidoo/mcp-memory-service.git
-cd mcp-memory-service
+The service is configured for Smithery integration through `smithery.yaml`. This configuration enables stdio-based communication with MCP clients like Claude Desktop.
 
-# Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+To use with Smithery:
 
-# Run the installation script
-python install.py
+1. Ensure your `claude_desktop_config.json` points to the correct paths:
+```json
+{
+  "memory": {
+    "command": "docker",
+    "args": [
+      "run",
+      "-i",
+      "--rm",
+      "-v", "$HOME/mcp-memory/chroma_db:/app/chroma_db",
+      "-v", "$HOME/mcp-memory/backups:/app/backups",
+      "mcp-memory-service"
+    ],
+    "env": {
+      "MCP_MEMORY_CHROMA_PATH": "/app/chroma_db",
+      "MCP_MEMORY_BACKUPS_PATH": "/app/backups"
+    }
+  }
+}
 ```
 
-The `install.py` script will:
-1. Detect your system architecture and available hardware accelerators
-2. Install the appropriate dependencies for your platform
-3. Configure the optimal settings for your environment
-4. Verify the installation and provide diagnostics if needed
+2. The `smithery.yaml` configuration handles stdio communication and environment setup automatically.
 
-### Windows Installation (Special Case)
+### Testing with Claude Desktop
 
-Windows users may encounter PyTorch installation issues due to platform-specific wheel availability. 
+To verify your Docker-based memory service is working correctly with Claude Desktop:
 
-We recommend using UV (see above) which handles these complexities automatically. Alternatively, use our Windows-specific wrapper:
+1. Build the Docker image with `docker build -t mcp-memory-service .`
+2. Create the necessary directories for persistent storage:
+   ```bash
+   mkdir -p $HOME/mcp-memory/chroma_db $HOME/mcp-memory/backups
+   ```
+3. Update your Claude Desktop configuration file:
+   - On macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+   - On Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+   - On Linux: `~/.config/Claude/claude_desktop_config.json`
+4. Restart Claude Desktop
+5. When Claude starts up, you should see the memory service initialize with a message:
+   ```
+   MCP Memory Service initialization completed
+   ```
+6. Test the memory feature:
+   - Ask Claude to remember something: "Please remember that my favorite color is blue"
+   - Later in the conversation or in a new conversation, ask: "What is my favorite color?"
+   - Claude should retrieve the information from the memory service
 
-```bash
-# After activating your virtual environment
-python memory_wrapper_uv.py  # UV-based wrapper (recommended)
-# OR
-python memory_wrapper.py     # Traditional wrapper
-```
+If you experience any issues:
+- Check the Claude Desktop console for error messages
+- Verify Docker has the necessary permissions to access the mounted directories
+- Ensure the Docker container is running with the correct parameters
+- Try running the container manually to see any error output
 
-This script handles:
-1. Detecting CUDA availability and version
-2. Installing the appropriate PyTorch version from the correct index URL
-3. Installing other dependencies without conflicting with PyTorch
-4. Verifying the installation
+For detailed installation instructions, platform-specific guides, and troubleshooting, see our [documentation](docs/):
 
-### Installing via Smithery
+- [Installation Guide](docs/guides/installation.md) - Comprehensive installation instructions for all platforms
+- [Troubleshooting Guide](docs/guides/troubleshooting.md) - Solutions for common issues
+- [Technical Documentation](docs/technical/) - Detailed technical procedures and specifications
+- [Scripts Documentation](docs/guides/scripts.md) - Overview of available scripts and their usage
 
-To install Memory Service for Claude Desktop automatically via [Smithery](https://smithery.ai/server/@doobidoo/mcp-memory-service):
-
-```bash
-npx -y @smithery/cli install @doobidoo/mcp-memory-service --client claude
-```
-
-### Detailed Installation Guide
-
-For comprehensive installation instructions and troubleshooting, see the [Installation Guide](docs/guides/installation.md).
-
-## Claude MCP Configuration
+## Configuration
 
 ### Standard Configuration (Recommended)
 
@@ -149,7 +176,7 @@ Add the following to your `claude_desktop_config.json` file to use UV (recommend
 
 ### Windows-Specific Configuration (Recommended)
 
-For Windows users, we recommend using the wrapper script to ensure PyTorch is properly installed:
+For Windows users, we recommend using the wrapper script to ensure PyTorch is properly installed. See our [Windows Setup Guide](docs/guides/windows-setup.md) for detailed instructions.
 
 ```json
 {
@@ -171,23 +198,20 @@ The wrapper script will:
 2. Install PyTorch with the correct index URL if needed
 3. Run the memory server with the appropriate configuration
 
-## Usage
+## Hardware Compatibility
 
-To run the memory server directly (for testing):
-
-```bash
-# Run with UV (recommended for best performance)
-uv run memory
-
-# Use the UV wrapper for automatic dependency handling
-python uv_wrapper.py
-
-# Alternative: quick run script (traditional method)
-python scripts/run_memory_server.py
-
-# For isolated testing of methods
-python src/chroma_test_isolated.py
-```
+| Platform | Architecture | Accelerator | Status |
+|----------|--------------|-------------|--------|
+| macOS | Apple Silicon (M1/M2/M3) | MPS | ✅ Fully supported |
+| macOS | Apple Silicon under Rosetta 2 | CPU | ✅ Supported with fallbacks |
+| macOS | Intel | CPU | ✅ Fully supported |
+| Windows | x86_64 | CUDA | ✅ Fully supported |
+| Windows | x86_64 | DirectML | ✅ Supported |
+| Windows | x86_64 | CPU | ✅ Supported with fallbacks |
+| Linux | x86_64 | CUDA | ✅ Fully supported |
+| Linux | x86_64 | ROCm | ✅ Supported |
+| Linux | x86_64 | CPU | ✅ Supported with fallbacks |
+| Linux | ARM64 | CPU | ✅ Supported with fallbacks |
 
 ## Memory Operations
 
@@ -201,6 +225,8 @@ The memory service provides the following operations through the MCP server:
 4. `search_by_tag` - Find memories using specific tags
 5. `exact_match_retrieve` - Find memories with exact content match
 6. `debug_retrieve` - Retrieve memories with similarity scores
+
+For detailed information about tag storage and management, see our [Tag Storage Documentation](docs/technical/tag_storage.md).
 
 ### Database Management
 
@@ -238,59 +264,13 @@ MCP_MEMORY_MODEL_NAME: Override the default embedding model
 MCP_MEMORY_BATCH_SIZE: Override the default batch size
 ```
 
-## Hardware Compatibility
+## Getting Help
 
-| Platform | Architecture | Accelerator | Status |
-|----------|--------------|-------------|--------|
-| macOS | Apple Silicon (M1/M2/M3) | MPS | ✅ Fully supported |
-| macOS | Apple Silicon under Rosetta 2 | CPU | ✅ Supported with fallbacks |
-| macOS | Intel | CPU | ✅ Fully supported |
-| Windows | x86_64 | CUDA | ✅ Fully supported |
-| Windows | x86_64 | DirectML | ✅ Supported |
-| Windows | x86_64 | CPU | ✅ Supported with fallbacks |
-| Linux | x86_64 | CUDA | ✅ Fully supported |
-| Linux | x86_64 | ROCm | ✅ Supported |
-| Linux | x86_64 | CPU | ✅ Supported with fallbacks |
-| Linux | ARM64 | CPU | ✅ Supported with fallbacks |
-
-## Testing
-
-```bash
-# Install test dependencies
-pip install pytest pytest-asyncio
-
-# Run all tests
-pytest tests/
-
-# Run specific test categories
-pytest tests/test_memory_ops.py
-pytest tests/test_semantic_search.py
-pytest tests/test_database.py
-
-# Verify environment compatibility
-python scripts/verify_environment_enhanced.py
-
-# Verify PyTorch installation on Windows
-python scripts/verify_pytorch_windows.py
-
-# Perform comprehensive installation verification
-python scripts/test_installation.py
-```
-
-## Troubleshooting
-
-See the [Installation Guide](docs/guides/installation.md#troubleshooting-common-installation-issues) for detailed troubleshooting steps.
-
-### Quick Troubleshooting Tips
-
-- **Dependency issues**: Try using UV: `python scripts/convert_to_uv.py`
-- **Windows PyTorch errors**: Use `python memory_wrapper_uv.py`
-- **macOS Intel dependency conflicts**: Use UV or `python install.py --force-compatible-deps`
-- **Recursion errors**: Run `python scripts/fix_sitecustomize.py` 
-- **Environment verification**: Run `python scripts/verify_environment_enhanced.py`
-- **Memory issues**: Set `MCP_MEMORY_BATCH_SIZE=4` and try a smaller model
-- **Apple Silicon**: Ensure Python 3.10+ built for ARM64, set `PYTORCH_ENABLE_MPS_FALLBACK=1`
-- **Installation testing**: Run `python scripts/test_installation.py`
+If you encounter any issues:
+1. Check our [Troubleshooting Guide](docs/guides/troubleshooting.md)
+2. Review the [Installation Guide](docs/guides/installation.md)
+3. For Windows-specific issues, see our [Windows Setup Guide](docs/guides/windows-setup.md)
+4. Contact the developer via Telegram: t.me/doobeedoo
 
 ## Project Structure
 
